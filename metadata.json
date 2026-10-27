@@ -1,0 +1,6 @@
+{
+  "name": "AquaFlow - Manajemen Les Renang & Absensi Barcode",
+  "description": "Sistem manajemen akademi renang modern dengan hak akses multi-role (Admin, Pelatih, Kelas Dasar, Pemula, Prestasi, Privat 4/8/12), absensi barcode/QR unik, dan integrasi Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

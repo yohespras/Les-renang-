@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read and write for all club operational collections to support multi-device syncing across Tablets, Phones, and Desktops
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+
+    match /coaches/{coachId} {
+      allow read, write: if true;
+    }
+
+    match /attendances/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    match /payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    match /academyProfile/{profileId} {
+      allow read, write: if true;
+    }
+
+    match /bankAccounts/{accountId} {
+      allow read, write: if true;
+    }
+
+    match /registrations/{registrationId} {
+      allow read, write: if true;
+    }
+
+    match /pricingPackages/{packageId} {
+      allow read, write: if true;
+    }
+
+    match /galleryItems/{itemId} {
+      allow read, write: if true;
+    }
+
+    // Default catch-all for any other path
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

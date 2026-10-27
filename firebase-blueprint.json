@@ -1,0 +1,214 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user account for admin, coaches, and students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "phone": { "type": "string" },
+        "studentId": { "type": "string" },
+        "coachId": { "type": "string" },
+        "barcode": { "type": "string" }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Swimming club student athlete profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "gender": { "type": "string" },
+        "age": { "type": "number" },
+        "birthDate": { "type": "string" },
+        "roleClass": { "type": "string" },
+        "phone": { "type": "string" },
+        "parentName": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "joinedDate": { "type": "string" },
+        "status": { "type": "string" },
+        "remainingQuota": { "type": "number" },
+        "totalQuota": { "type": "number" },
+        "assignedCoachId": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "barcode", "name", "roleClass", "status"]
+    },
+    "Coach": {
+      "title": "Coach",
+      "description": "Coach profile with assigned classes and credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "specialty": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "assignedClasses": { "type": "array" }
+      },
+      "required": ["id", "name", "specialty"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Session attendance check-in record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentBarcode": { "type": "string" },
+        "roleClass": { "type": "string" },
+        "dateStr": { "type": "string" },
+        "timeStr": { "type": "string" },
+        "coachId": { "type": "string" },
+        "coachName": { "type": "string" },
+        "status": { "type": "string" },
+        "poolLane": { "type": "string" },
+        "verifiedByBarcode": { "type": "boolean" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "studentId", "dateStr", "status"]
+    },
+    "PaymentRecord": {
+      "title": "PaymentRecord",
+      "description": "Fee and tuition payment transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "roleClass": { "type": "string" },
+        "packageName": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
+        "proofUrl": { "type": "string" },
+        "transferBankName": { "type": "string" },
+        "senderAccountName": { "type": "string" },
+        "sessionsToAdd": { "type": "number" },
+        "verifiedAt": { "type": "string" },
+        "verifiedBy": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber", "studentId", "amount", "status"]
+    },
+    "AcademyProfile": {
+      "title": "AcademyProfile",
+      "description": "Profile, branding, and contact information for the swim academy",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "description": { "type": "string" },
+        "aboutStory": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "heroImageUrl": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "operatingHours": { "type": "string" },
+        "registrationFee": { "type": "number" },
+        "isRegistrationOpen": { "type": "boolean" },
+        "facilities": { "type": "array" },
+        "footerName": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "BankAccountInfo": {
+      "title": "BankAccountInfo",
+      "description": "Official club bank account information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bankName": { "type": "string" },
+        "bankCode": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "accountHolder": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "bankName", "accountNumber", "accountHolder"]
+    },
+    "StudentRegistration": {
+      "title": "StudentRegistration",
+      "description": "New prospective student online registration form submissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "nickname": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "age": { "type": "number" },
+        "gender": { "type": "string" },
+        "roleClass": { "type": "string" },
+        "parentName": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "medicalHistory": { "type": "string" },
+        "preferredSchedule": { "type": "string" },
+        "registrationDate": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "fullName", "phone", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User login accounts and role mappings"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student athlete records"
+    },
+    "/coaches/{coachId}": {
+      "schema": { "$ref": "#/entities/Coach" },
+      "description": "Coach roster and profiles"
+    },
+    "/attendances/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Pool attendance scan and manual logs"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Student payment invoices and receipts"
+    },
+    "/academyProfile/{profileId}": {
+      "schema": { "$ref": "#/entities/AcademyProfile" },
+      "description": "Club profile and settings"
+    },
+    "/bankAccounts/{accountId}": {
+      "schema": { "$ref": "#/entities/BankAccountInfo" },
+      "description": "Official bank accounts"
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/StudentRegistration" },
+      "description": "New student registration forms"
+    },
+    "/pricingPackages/{packageId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Class packages and pricing"
+    },
+    "/galleryItems/{itemId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Club gallery photos and media"
+    }
+  }
+}
