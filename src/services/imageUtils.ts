@@ -4,9 +4,9 @@
  */
 export const compressAndResizeImage = (
   file: File,
-  maxWidth = 480,
-  maxHeight = 480,
-  quality = 0.85
+  maxWidth = 360,
+  maxHeight = 360,
+  quality = 0.82
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Validate file type

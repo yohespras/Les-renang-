@@ -381,6 +381,28 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  // Otomatis sinkronisasi currentUser saat appUsers diperbarui dari Cloud Firestore
+  useEffect(() => {
+    if (!currentUser) return;
+    const freshUser = appUsers.find(
+      (u) =>
+        u.id === currentUser.id ||
+        (currentUser.barcode && u.barcode === currentUser.barcode) ||
+        (currentUser.username && u.username?.toLowerCase() === currentUser.username.toLowerCase())
+    );
+    if (freshUser && freshUser.avatarUrl && freshUser.avatarUrl !== currentUser.avatarUrl) {
+      const updated = {
+        ...currentUser,
+        avatarUrl: freshUser.avatarUrl,
+        name: freshUser.name || currentUser.name,
+      };
+      setCurrentUser(updated);
+      try {
+        localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updated));
+      } catch (e) {}
+    }
+  }, [appUsers]);
+
   // Handle Attendance Scan Recorded
   const handleAttendanceRecorded = (record: AttendanceRecord, updatedStudent?: Student) => {
     const updatedAttendances = [record, ...attendances];
@@ -803,6 +825,25 @@ export default function App() {
       }
       return updatedUsers;
     });
+
+    // Sinkronisasi ke sesi aktif currentUser jika merupakan siswa ini
+    if (
+      currentUser &&
+      (currentUser.studentId === updatedStudent.id ||
+        (currentUser.barcode && currentUser.barcode === updatedStudent.barcode))
+    ) {
+      const updatedCurr = {
+        ...currentUser,
+        name: updatedStudent.name,
+        role: updatedStudent.roleClass,
+        phone: updatedStudent.phone,
+        avatarUrl: updatedStudent.avatarUrl,
+      };
+      setCurrentUser(updatedCurr);
+      try {
+        localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedCurr));
+      } catch (e) {}
+    }
   };
 
   // Delete student
@@ -954,22 +995,61 @@ export default function App() {
       localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedUser));
     }
     // Sync with coaches list if this user is a coach
-    if (updatedUser.role === 'pelatih') {
-      const updatedCoaches = coaches.map((c) =>
-        (updatedUser.coachId && c.id === updatedUser.coachId) ||
-        c.name.toLowerCase() === updatedUser.name.toLowerCase()
-          ? {
-              ...c,
-              name: updatedUser.name,
-              avatarUrl: updatedUser.avatarUrl,
-              barcode: updatedUser.barcode || c.barcode,
-              email: updatedUser.email || c.email,
-              phone: updatedUser.phone || c.phone,
-            }
-          : c
-      );
+    if (updatedUser.role === 'pelatih' || updatedUser.coachId) {
+      let targetCoach: Coach | null = null;
+      const updatedCoaches = coaches.map((c) => {
+        if (
+          (updatedUser.coachId && c.id === updatedUser.coachId) ||
+          (updatedUser.barcode && c.barcode === updatedUser.barcode) ||
+          c.name.toLowerCase() === updatedUser.name.toLowerCase()
+        ) {
+          targetCoach = {
+            ...c,
+            name: updatedUser.name,
+            avatarUrl: updatedUser.avatarUrl,
+            barcode: updatedUser.barcode || c.barcode,
+            email: updatedUser.email || c.email,
+            phone: updatedUser.phone || c.phone,
+          };
+          return targetCoach;
+        }
+        return c;
+      });
       setCoaches(updatedCoaches);
-      localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+      try {
+        localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+      } catch (e) {}
+      if (targetCoach) {
+        syncSaveCoach(targetCoach);
+      }
+    }
+
+    // Sync with students list if this user is a student
+    if (updatedUser.studentId || (updatedUser.barcode && updatedUser.barcode.startsWith('AQUA-STD'))) {
+      let targetStudent: Student | null = null;
+      const updatedStudents = students.map((s) => {
+        if (
+          (updatedUser.studentId && s.id === updatedUser.studentId) ||
+          (updatedUser.barcode && s.barcode === updatedUser.barcode) ||
+          s.name.toLowerCase() === updatedUser.name.toLowerCase()
+        ) {
+          targetStudent = {
+            ...s,
+            name: updatedUser.name,
+            avatarUrl: updatedUser.avatarUrl,
+            phone: updatedUser.phone || s.phone,
+          };
+          return targetStudent;
+        }
+        return s;
+      });
+      setStudents(updatedStudents);
+      try {
+        localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+      } catch (e) {}
+      if (targetStudent) {
+        syncSaveStudent(targetStudent);
+      }
     }
   };
 
@@ -978,79 +1058,148 @@ export default function App() {
     if (!currentUser) return;
 
     // 1. Update currentUser
-    const updatedUser = { ...currentUser, avatarUrl: newAvatarUrl };
+    const updatedUser: AuthUser = { ...currentUser, avatarUrl: newAvatarUrl };
     setCurrentUser(updatedUser);
-    localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedUser));
-
-    // 2. Update appUsers
-    const updatedUsers = appUsers.map((u) =>
-      u.id === currentUser.id ? { ...u, avatarUrl: newAvatarUrl } : u
-    );
-    setAppUsers(updatedUsers);
-    localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
-
-    // 3. If coach, also sync coaches list
-    if (currentUser.role === 'pelatih') {
-      const updatedCoaches = coaches.map((c) =>
-        (currentUser.coachId && c.id === currentUser.coachId) ||
-        c.name.toLowerCase() === currentUser.name.toLowerCase()
-          ? { ...c, avatarUrl: newAvatarUrl }
-          : c
-      );
-      setCoaches(updatedCoaches);
-      localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+    try {
+      localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedUser));
+    } catch (e) {
+      console.warn('Quota error saving AQUA_AUTH_USER:', e);
     }
 
-    // 4. If student, also sync students list
-    if (currentUser.studentId) {
-      const updatedStudents = students.map((s) =>
-        s.id === currentUser.studentId ? { ...s, avatarUrl: newAvatarUrl } : s
-      );
+    // 2. Update appUsers and PERSIST TO FIRESTORE
+    let foundInAppUsers = false;
+    const updatedUsers = appUsers.map((u) => {
+      if (u.id === currentUser.id || (currentUser.barcode && u.barcode === currentUser.barcode)) {
+        foundInAppUsers = true;
+        return { ...u, avatarUrl: newAvatarUrl };
+      }
+      return u;
+    });
+    const finalUsers = foundInAppUsers ? updatedUsers : [updatedUser, ...updatedUsers];
+    setAppUsers(finalUsers);
+    try {
+      localStorage.setItem('AQUA_APP_USERS', JSON.stringify(finalUsers));
+    } catch (e) {
+      console.warn('Quota error saving AQUA_APP_USERS:', e);
+    }
+    // SIMPAN KE CLOUD FIRESTORE AGAR PERSISTEN SETELAH LOGOUT & DI SEMUA PERANGKAT
+    syncSaveUser(updatedUser);
+
+    // 3. If coach, also sync coaches list and PERSIST TO FIRESTORE
+    if (currentUser.role === 'pelatih' || currentUser.coachId) {
+      let targetCoach: Coach | null = null;
+      const updatedCoaches = coaches.map((c) => {
+        if (
+          (currentUser.coachId && c.id === currentUser.coachId) ||
+          (currentUser.barcode && c.barcode === currentUser.barcode) ||
+          c.name.toLowerCase() === currentUser.name.toLowerCase()
+        ) {
+          targetCoach = { ...c, avatarUrl: newAvatarUrl };
+          return targetCoach;
+        }
+        return c;
+      });
+      setCoaches(updatedCoaches);
+      try {
+        localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+      } catch (e) {}
+      if (targetCoach) {
+        syncSaveCoach(targetCoach);
+      }
+    }
+
+    // 4. If student, also sync students list and PERSIST TO FIRESTORE
+    if (currentUser.studentId || (currentUser.barcode && currentUser.barcode.startsWith('AQUA-STD'))) {
+      let targetStudent: Student | null = null;
+      const updatedStudents = students.map((s) => {
+        if (
+          (currentUser.studentId && s.id === currentUser.studentId) ||
+          (currentUser.barcode && s.barcode === currentUser.barcode) ||
+          s.name.toLowerCase() === currentUser.name.toLowerCase()
+        ) {
+          targetStudent = { ...s, avatarUrl: newAvatarUrl };
+          return targetStudent;
+        }
+        return s;
+      });
       setStudents(updatedStudents);
-      localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+      try {
+        localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+      } catch (e) {}
+      if (targetStudent) {
+        syncSaveStudent(targetStudent);
+      }
     }
   };
 
   const handleUpdateCoachAvatar = (newAvatarUrl: string, coachId: string) => {
-    // 1. Update coaches state
-    const updatedCoaches = coaches.map((c) =>
-      c.id === coachId ? { ...c, avatarUrl: newAvatarUrl } : c
-    );
+    // 1. Update coaches state and PERSIST TO FIRESTORE
+    let targetCoach: Coach | null = null;
+    const updatedCoaches = coaches.map((c) => {
+      if (c.id === coachId) {
+        targetCoach = { ...c, avatarUrl: newAvatarUrl };
+        return targetCoach;
+      }
+      return c;
+    });
     setCoaches(updatedCoaches);
-    localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+    try {
+      localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+    } catch (e) {}
+    if (targetCoach) {
+      syncSaveCoach(targetCoach);
+    }
 
-    // 2. Update appUsers if coach has user account
-    const targetCoach = coaches.find((c) => c.id === coachId);
-    const updatedUsers = appUsers.map((u) =>
-      (u.coachId === coachId || (targetCoach && u.name.toLowerCase() === targetCoach.name.toLowerCase()))
-        ? { ...u, avatarUrl: newAvatarUrl }
-        : u
-    );
+    // 2. Update appUsers if coach has user account and PERSIST TO FIRESTORE
+    let matchedUser: AuthUser | null = null;
+    const updatedUsers = appUsers.map((u) => {
+      if (
+        u.coachId === coachId ||
+        (targetCoach && (u.barcode === (targetCoach as Coach).barcode || u.name.toLowerCase() === (targetCoach as Coach).name.toLowerCase()))
+      ) {
+        matchedUser = { ...u, avatarUrl: newAvatarUrl };
+        return matchedUser;
+      }
+      return u;
+    });
     setAppUsers(updatedUsers);
-    localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    try {
+      localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    } catch (e) {}
+    if (matchedUser) {
+      syncSaveUser(matchedUser);
+    }
 
     // 3. If active currentUser is this coach, update currentUser
     if (
       currentUser &&
       (currentUser.coachId === coachId ||
-        (targetCoach && currentUser.name.toLowerCase() === targetCoach.name.toLowerCase()))
+        (targetCoach && currentUser.name.toLowerCase() === (targetCoach as Coach).name.toLowerCase()))
     ) {
       const updatedUser = { ...currentUser, avatarUrl: newAvatarUrl };
       setCurrentUser(updatedUser);
-      localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedUser));
+      try {
+        localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedUser));
+      } catch (e) {}
     }
   };
 
   const handleUpdateCoach = (updatedCoach: Coach) => {
     const updated = coaches.map((c) => (c.id === updatedCoach.id ? updatedCoach : c));
     setCoaches(updated);
-    localStorage.setItem('AQUA_COACHES', JSON.stringify(updated));
+    try {
+      localStorage.setItem('AQUA_COACHES', JSON.stringify(updated));
+    } catch (e) {}
     syncSaveCoach(updatedCoach);
 
     // Also update appUsers if coach has user account & Cloud Firestore
     let matchedCoachUser: AuthUser | null = null;
     const updatedUsers = appUsers.map((u) => {
-      if (u.coachId === updatedCoach.id || u.name.toLowerCase() === updatedCoach.name.toLowerCase()) {
+      if (
+        u.coachId === updatedCoach.id ||
+        (u.barcode && u.barcode === updatedCoach.barcode) ||
+        u.name.toLowerCase() === updatedCoach.name.toLowerCase()
+      ) {
         matchedCoachUser = {
           ...u,
           name: updatedCoach.name,
@@ -1064,7 +1213,9 @@ export default function App() {
       return u;
     });
     setAppUsers(updatedUsers);
-    localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    try {
+      localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    } catch (e) {}
     if (matchedCoachUser) {
       syncSaveUser(matchedCoachUser);
     }
@@ -1084,7 +1235,9 @@ export default function App() {
         barcode: updatedCoach.barcode || currentUser.barcode,
       };
       setCurrentUser(updatedCurr);
-      localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedCurr));
+      try {
+        localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(updatedCurr));
+      } catch (e) {}
     }
   };
 
@@ -1232,6 +1385,7 @@ export default function App() {
     return (
       <LoginPage
         students={students}
+        coaches={coaches}
         appUsers={appUsers}
         onLoginSuccess={handleLoginSuccess}
         isDark={isDark}

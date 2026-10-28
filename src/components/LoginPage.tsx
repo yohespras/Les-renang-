@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AuthUser, Student, UserRole } from '../types';
+import { AuthUser, Student, UserRole, Coach } from '../types';
 import { ROLE_LABELS } from '../data/mockData';
 import { playBarcodeBeep } from '../services/audioBeep';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
@@ -31,6 +31,7 @@ import {
 
 interface LoginPageProps {
   students: Student[];
+  coaches?: Coach[];
   appUsers?: AuthUser[];
   onLoginSuccess: (user: AuthUser) => void;
   isDark: boolean;
@@ -42,6 +43,7 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   students,
+  coaches = [],
   appUsers = [],
   onLoginSuccess,
   isDark,
@@ -104,7 +106,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     );
 
     if (matchedAppUser) {
-      onLoginSuccess(matchedAppUser);
+      const finalUser: AuthUser = { ...matchedAppUser };
+      if (matchedAppUser.role === 'pelatih') {
+        const c = coaches.find(
+          (coach) =>
+            (matchedAppUser.coachId && coach.id === matchedAppUser.coachId) ||
+            (matchedAppUser.barcode && coach.barcode === matchedAppUser.barcode) ||
+            coach.name.toLowerCase() === matchedAppUser.name.toLowerCase()
+        );
+        if (c?.avatarUrl) {
+          finalUser.avatarUrl = c.avatarUrl;
+        }
+      } else if (matchedAppUser.studentId || matchedAppUser.barcode) {
+        const st = students.find(
+          (s) =>
+            (matchedAppUser.studentId && s.id === matchedAppUser.studentId) ||
+            (matchedAppUser.barcode && s.barcode === matchedAppUser.barcode) ||
+            s.name.toLowerCase() === matchedAppUser.name.toLowerCase()
+        );
+        if (st?.avatarUrl) {
+          finalUser.avatarUrl = st.avatarUrl;
+        }
+      }
+      onLoginSuccess(finalUser);
       return;
     }
 
@@ -125,16 +149,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       const expectedPass = studentUser?.password || 'siswa123';
 
       if (pass === expectedPass || pass === 'siswa123' || pass === '123456') {
-        const user: AuthUser = studentUser || {
-          id: `usr-${matchedStudent.id}`,
-          name: matchedStudent.name,
-          username: matchedStudent.barcode.toLowerCase(),
-          email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
-          role: matchedStudent.roleClass,
-          avatarUrl: matchedStudent.avatarUrl,
-          studentId: matchedStudent.id,
-          barcode: matchedStudent.barcode,
-        };
+        const user: AuthUser = studentUser
+          ? { ...studentUser, avatarUrl: matchedStudent.avatarUrl || studentUser.avatarUrl }
+          : {
+              id: `usr-${matchedStudent.id}`,
+              name: matchedStudent.name,
+              username: matchedStudent.barcode.toLowerCase(),
+              email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
+              role: matchedStudent.roleClass,
+              avatarUrl: matchedStudent.avatarUrl,
+              studentId: matchedStudent.id,
+              barcode: matchedStudent.barcode,
+            };
         onLoginSuccess(user);
         return;
       }
@@ -164,7 +190,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         // audio beep optional
       }
       setSuccessNotice(`Barcode terverifikasi! Masuk sebagai ${matchedAppUser.name}...`);
-      setTimeout(() => onLoginSuccess(matchedAppUser), 400);
+      const finalUser: AuthUser = { ...matchedAppUser };
+      if (matchedAppUser.role === 'pelatih') {
+        const c = coaches.find(
+          (coach) =>
+            (matchedAppUser.coachId && coach.id === matchedAppUser.coachId) ||
+            (matchedAppUser.barcode && coach.barcode === matchedAppUser.barcode) ||
+            coach.name.toLowerCase() === matchedAppUser.name.toLowerCase()
+        );
+        if (c?.avatarUrl) {
+          finalUser.avatarUrl = c.avatarUrl;
+        }
+      } else if (matchedAppUser.studentId || matchedAppUser.barcode) {
+        const st = students.find(
+          (s) =>
+            (matchedAppUser.studentId && s.id === matchedAppUser.studentId) ||
+            (matchedAppUser.barcode && s.barcode === matchedAppUser.barcode) ||
+            s.name.toLowerCase() === matchedAppUser.name.toLowerCase()
+        );
+        if (st?.avatarUrl) {
+          finalUser.avatarUrl = st.avatarUrl;
+        }
+      }
+      setTimeout(() => onLoginSuccess(finalUser), 400);
       return;
     }
 
@@ -177,16 +225,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         // audio beep optional
       }
       setSuccessNotice(`Barcode "${raw}" valid! Masuk sebagai ${matchedStudent.name}...`);
-      const user: AuthUser = {
-        id: `usr-${matchedStudent.id}`,
-        name: matchedStudent.name,
-        username: matchedStudent.barcode.toLowerCase(),
-        email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
-        role: matchedStudent.roleClass,
-        avatarUrl: matchedStudent.avatarUrl,
-        studentId: matchedStudent.id,
-        barcode: matchedStudent.barcode,
-      };
+      const studentUser = appUsers.find(
+        (u) => u.studentId === matchedStudent.id || (u.barcode && u.barcode === matchedStudent.barcode)
+      );
+      const user: AuthUser = studentUser
+        ? { ...studentUser, avatarUrl: matchedStudent.avatarUrl || studentUser.avatarUrl }
+        : {
+            id: `usr-${matchedStudent.id}`,
+            name: matchedStudent.name,
+            username: matchedStudent.barcode.toLowerCase(),
+            email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
+            role: matchedStudent.roleClass,
+            avatarUrl: matchedStudent.avatarUrl,
+            studentId: matchedStudent.id,
+            barcode: matchedStudent.barcode,
+          };
       setTimeout(() => onLoginSuccess(user), 400);
       return;
     }
