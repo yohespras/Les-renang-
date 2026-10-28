@@ -42,6 +42,10 @@ import {
   Database,
   Calendar,
   Check,
+  Copy,
+  ShieldAlert,
+  RefreshCw,
+  Info,
 } from 'lucide-react';
 
 interface GoogleSheetsModalProps {
@@ -85,6 +89,14 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const [historyList, setHistoryList] = useState<DailyMidnightSnapshot[]>(getDailyMidnightHistory());
   const [isTestingAutoSave, setIsTestingAutoSave] = useState(false);
 
+  // Vercel / Unauthorized Domain Guidance State
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<{
+    domain: string;
+    projectId: string;
+  } | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const [showVercelGuide, setShowVercelGuide] = useState(false);
+
   // Destructive/mutating action confirmation modal state (Workspace Skill Mandatory Rule)
   const [pendingAction, setPendingAction] = useState<{
     type: 'create_and_sync' | 'sync_students' | 'sync_attendance' | 'test_autosave';
@@ -98,6 +110,9 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       (currentUser, currentToken) => {
         setUser(currentUser);
         setToken(currentToken);
+        if (currentUser) {
+          setUnauthorizedDomain(null);
+        }
       },
       () => {
         setUser(null);
@@ -144,22 +159,40 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const handleSignIn = async () => {
     setIsLoggingIn(true);
     setStatusMessage(null);
+    setUnauthorizedDomain(null);
     try {
       const res = await googleSignIn();
       if (res) {
         setUser(res.user);
         setToken(res.accessToken);
+        setUnauthorizedDomain(null);
         setStatusMessage({
           type: 'success',
           text: `Berhasil terhubung sebagai ${res.user.displayName || res.user.email}!`,
         });
       }
-    } catch (err: unknown) {
-      console.error(err);
-      setStatusMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Gagal menghubungkan Google Account.',
-      });
+    } catch (err: any) {
+      console.error('Sign-in caught in modal:', err);
+      const isUnauthorized =
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && (err.message.includes('auth/unauthorized-domain') || err.message.includes('unauthorized-domain')));
+
+      if (isUnauthorized) {
+        const domain =
+          err?.currentDomain ||
+          (typeof window !== 'undefined' ? window.location.hostname : 'domain-anda.vercel.app');
+        const projectId = err?.projectId || 'gen-lang-client-0288550744';
+        setUnauthorizedDomain({ domain, projectId });
+        setStatusMessage({
+          type: 'error',
+          text: `Domain '${domain}' belum terdaftar di Firebase Authorized Domains. Ikuti petunjuk di bawah untuk mengaktifkannya.`,
+        });
+      } else {
+        setStatusMessage({
+          type: 'error',
+          text: err instanceof Error ? err.message : 'Gagal menghubungkan Google Account.',
+        });
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -389,6 +422,102 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 <HelpCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
               )}
               <div className="flex-1 font-medium leading-relaxed">{statusMessage.text}</div>
+            </div>
+          )}
+
+          {/* Unauthorized Domain Guide (Vercel / Custom Domain Error) */}
+          {unauthorizedDomain && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-slate-800 dark:text-slate-200 space-y-3.5 animate-fadeIn">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300">
+                      Domain Belum Diizinkan di Firebase (auth/unauthorized-domain)
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setUnauthorizedDomain(null)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                    Firebase Authentication menolak login Google Sheets karena domain Vercel ini belum didaftarkan di daftar <strong>Authorized domains</strong> Firebase Console.
+                  </p>
+                </div>
+              </div>
+
+              {/* Domain Copy Box */}
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-500/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Domain Anda Saat Ini:
+                  </span>
+                  <code className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 break-all select-all">
+                    {unauthorizedDomain.domain}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(unauthorizedDomain.domain);
+                    setCopiedDomain(true);
+                    setTimeout(() => setCopiedDomain(false), 2500);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedDomain ? 'Tersalin ke Clipboard!' : 'Salin Domain'}</span>
+                </button>
+              </div>
+
+              {/* 3 Step Instructions */}
+              <div className="bg-white/60 dark:bg-slate-900/60 p-3.5 rounded-xl border border-amber-500/20 space-y-2 text-xs">
+                <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>Cara Mengatasi dalam 1 Menit:</span>
+                </p>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                  <li>
+                    Klik tombol <strong>"Buka Firebase Console Settings"</strong> di bawah.
+                  </li>
+                  <li>
+                    Pilih tab <strong>Settings</strong> &gt; gulir ke bagian <strong>Authorized domains</strong>.
+                  </li>
+                  <li>
+                    Klik <strong>"Add domain"</strong>, tempelkan <code className="bg-amber-500/10 px-1.5 py-0.5 rounded font-mono font-bold text-amber-700 dark:text-amber-300">{unauthorizedDomain.domain}</code> (atau cukup <code className="bg-amber-500/10 px-1.5 py-0.5 rounded font-mono font-bold text-amber-700 dark:text-amber-300">vercel.app</code>), lalu klik <strong>Add / Simpan</strong>.
+                  </li>
+                  <li>
+                    Kembali ke halaman ini dan klik tombol <strong>"Coba Hubungkan Ulang"</strong>.
+                  </li>
+                </ol>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <a
+                  href={`https://console.firebase.google.com/project/${unauthorizedDomain.projectId}/authentication/settings`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  <span>Buka Firebase Console Settings</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={handleSignIn}
+                  disabled={isLoggingIn}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isLoggingIn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  <span>Coba Hubungkan Ulang</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -625,6 +754,57 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                       )}
                       <span>{isLoggingIn ? 'Menghubungkan...' : 'Sign in with Google'}</span>
                     </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Vercel Domain Tip Trigger */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowVercelGuide(!showVercelGuide)}
+                  className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Info className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>
+                    {showVercelGuide
+                      ? 'Sembunyikan panduan izin domain Vercel'
+                      : 'Deploy di Vercel? Buka panduan izin Authorized Domains di Firebase'}
+                  </span>
+                </button>
+
+                {showVercelGuide && (
+                  <div className="mt-2.5 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-2.5 animate-fadeIn">
+                    <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Pengaturan Domain saat Deploy ke Vercel:</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Jika aplikasi Anda diakses melalui domain Vercel (contoh: <code className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded font-mono">nama-projek.vercel.app</code>), Firebase Authentication membutuhkan izin domain tersebut agar login Google Sheets tidak memicu error <code className="text-rose-500 font-mono">auth/unauthorized-domain</code>:
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+                      <li>
+                        Buka Firebase Console: <strong>Authentication &gt; Settings &gt; Authorized domains</strong>.
+                      </li>
+                      <li>
+                        Klik tombol <strong>"Add domain"</strong>.
+                      </li>
+                      <li>
+                        Ketik nama domain Vercel Anda atau ketik <code className="font-mono font-bold bg-slate-200 dark:bg-slate-700 px-1 rounded text-cyan-600">vercel.app</code>, lalu klik <strong>Add</strong>.
+                      </li>
+                      <li>Selesai! Login Google Sheets akan langsung berfungsi normal.</li>
+                    </ol>
+                    <div className="pt-1">
+                      <a
+                        href="https://console.firebase.google.com/project/gen-lang-client-0288550744/authentication/settings"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline"
+                      >
+                        <span>Buka Firebase Console Settings</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>

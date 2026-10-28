@@ -178,25 +178,28 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       return;
     }
 
-    // Check quota for private classes
-    let updatedStudent: Student | undefined = undefined;
-    if (matched.roleClass.startsWith('privat_')) {
-      if (matched.remainingQuota <= 0) {
-        playBarcodeBeep(false);
-        setScanResult({
-          success: false,
-          message: `Kuota sesi privat ${matched.name} telah habis (0/${matched.totalQuota}). Silakan perpanjang paket.`,
-          student: matched,
-          source,
-        });
-        return;
-      }
-      // Deduct 1 quota
-      updatedStudent = {
-        ...matched,
-        remainingQuota: Math.max(0, matched.remainingQuota - 1),
-      };
+    // Check quota for all swimming classes
+    const effectiveTotal = matched.totalQuota > 0 ? matched.totalQuota : 12;
+    const currentRemaining = typeof matched.remainingQuota === 'number' ? matched.remainingQuota : effectiveTotal;
+
+    if (currentRemaining <= 0) {
+      playBarcodeBeep(false);
+      setScanResult({
+        success: false,
+        message: `Kuota sesi renang ${matched.name} telah habis (0/${effectiveTotal}). Harap lakukan perpanjangan paket pertemuan.`,
+        student: matched,
+        source,
+      });
+      return;
     }
+
+    // Deduct 1 quota for this attendance session
+    const newRemaining = Math.max(0, currentRemaining - 1);
+    const updatedStudent: Student = {
+      ...matched,
+      totalQuota: effectiveTotal,
+      remainingQuota: newRemaining,
+    };
 
     // Play successful audio beep
     playBarcodeBeep(true);
@@ -550,11 +553,15 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                     </span>
                     <span>Kelas: {scanResult.student.roleClass.toUpperCase()}</span>
                     <span>Waktu: {scanResult.timestamp}</span>
-                    {scanResult.student.roleClass.startsWith('privat_') && (
-                      <span className="font-semibold text-cyan-600 dark:text-cyan-400">
-                        Sisa Kuota: {scanResult.student.remainingQuota} / {scanResult.student.totalQuota}
-                      </span>
-                    )}
+                    <span
+                      className={`font-semibold ${
+                        scanResult.student.remainingQuota <= 1
+                          ? 'text-rose-600 dark:text-rose-400 font-bold'
+                          : 'text-cyan-600 dark:text-cyan-400'
+                      }`}
+                    >
+                      Sisa Kuota: {scanResult.student.remainingQuota} / {scanResult.student.totalQuota} Sesi
+                    </span>
                   </div>
                 )}
               </div>

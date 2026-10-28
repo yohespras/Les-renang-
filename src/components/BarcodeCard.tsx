@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { Student, Coach, AuthUser } from '../types';
-import { ROLE_LABELS } from '../data/mockData';
+import { ROLE_LABELS, getEffectiveStudentQuota } from '../data/mockData';
 import {
   Printer,
   Waves,
@@ -62,8 +62,11 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
         roleClass: student.roleClass,
         age: student.age,
         birthDate: student.birthDate,
-        remainingQuota: student.remainingQuota,
-        totalQuota: student.totalQuota,
+        remainingQuota: Math.min(
+          getEffectiveStudentQuota(student),
+          student.remainingQuota ?? getEffectiveStudentQuota(student)
+        ),
+        totalQuota: getEffectiveStudentQuota(student),
         parentName: student.parentName,
         emergencyContact: student.emergencyContact,
         isStaff: false,

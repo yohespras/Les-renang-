@@ -222,6 +222,7 @@ export default function App() {
     const updated = bankAccounts.map((b) => (b.id === updatedAcc.id ? updatedAcc : b));
     setBankAccounts(updated);
     localStorage.setItem('AQUA_BANK_ACCOUNTS', JSON.stringify(updated));
+    syncSaveBankAccount(updatedAcc);
   };
 
   
@@ -407,21 +408,22 @@ export default function App() {
     localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
     syncSaveAttendance(updatedRecord);
 
-    // If status changed from/to 'hadir', adjust student quota if private
+    // If status changed from/to 'hadir', adjust student quota
     if (prev && prev.status !== updatedRecord.status) {
       const student = students.find((s) => s.id === updatedRecord.studentId);
-      if (student && student.roleClass.startsWith('privat_')) {
+      if (student) {
         let newRemaining = student.remainingQuota;
         if (prev.status === 'hadir' && updatedRecord.status !== 'hadir') {
-          newRemaining = Math.min(student.totalQuota, student.remainingQuota + 1);
+          newRemaining = Math.min(student.totalQuota, (student.remainingQuota ?? 0) + 1);
         } else if (prev.status !== 'hadir' && updatedRecord.status === 'hadir') {
-          newRemaining = Math.max(0, student.remainingQuota - 1);
+          newRemaining = Math.max(0, (student.remainingQuota ?? student.totalQuota) - 1);
         }
         if (newRemaining !== student.remainingQuota) {
           const updatedStudent = { ...student, remainingQuota: newRemaining };
           const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
           setStudents(updatedStudents);
           localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+          syncSaveStudent(updatedStudent);
         }
       }
     }
@@ -437,17 +439,18 @@ export default function App() {
     localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
     syncDeleteAttendance(attendanceId);
 
-    // If deleted record was 'hadir', restore quota for private class
+    // If deleted record was 'hadir', restore quota for student
     if (recordToDelete.status === 'hadir') {
       const student = students.find((s) => s.id === recordToDelete.studentId);
-      if (student && student.roleClass.startsWith('privat_')) {
+      if (student) {
         const updatedStudent = {
           ...student,
-          remainingQuota: Math.min(student.totalQuota, student.remainingQuota + 1),
+          remainingQuota: Math.min(student.totalQuota, (student.remainingQuota ?? 0) + 1),
         };
         const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
         setStudents(updatedStudents);
         localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+        syncSaveStudent(updatedStudent);
       }
     }
   };
@@ -466,10 +469,12 @@ export default function App() {
       ...student,
       totalQuota,
       remainingQuota,
+      manualExecutedSessions: executedSessions,
     };
     const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
     setStudents(updatedStudents);
     localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+    syncSaveStudent(updatedStudent);
   };
 
   // Reset all attendance logs for a student
@@ -477,18 +482,22 @@ export default function App() {
     const student = students.find((s) => s.id === studentId);
     if (!student) return;
 
+    const studentLogs = attendances.filter((a) => a.studentId === studentId);
     const updatedAttendances = attendances.filter((a) => a.studentId !== studentId);
     setAttendances(updatedAttendances);
     localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+    studentLogs.forEach((l) => syncDeleteAttendance(l.id));
 
     // Restore full quota
     const updatedStudent: Student = {
       ...student,
       remainingQuota: student.totalQuota,
+      manualExecutedSessions: 0,
     };
     const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
     setStudents(updatedStudents);
     localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+    syncSaveStudent(updatedStudent);
   };
 
   // Add new student (otomatis buat akun login di Manajemen User)
@@ -557,6 +566,7 @@ export default function App() {
     setAppUsers((prevUsers) => {
       let hasNew = false;
       let updatedUsers = [...prevUsers];
+      const newlyCreated: AuthUser[] = [];
 
       students.forEach((st) => {
         const exists = updatedUsers.some(
@@ -589,11 +599,13 @@ export default function App() {
             avatarUrl: st.avatarUrl,
           };
           updatedUsers = [newUser, ...updatedUsers];
+          newlyCreated.push(newUser);
         }
       });
 
       if (hasNew) {
         localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+        newlyCreated.forEach((u) => syncSaveUser(u));
         return updatedUsers;
       }
       return prevUsers;
@@ -691,6 +703,7 @@ export default function App() {
     setAppUsers((prevUsers) => {
       let hasNew = false;
       let updatedUsers = [...prevUsers];
+      const newlyCreated: AuthUser[] = [];
 
       coaches.forEach((c, idx) => {
         const exists = updatedUsers.some(
@@ -728,11 +741,13 @@ export default function App() {
             avatarUrl: c.avatarUrl,
           };
           updatedUsers = [newUser, ...updatedUsers];
+          newlyCreated.push(newUser);
         }
       });
 
       if (hasNew) {
         localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+        newlyCreated.forEach((u) => syncSaveUser(u));
         return updatedUsers;
       }
       return prevUsers;
@@ -747,7 +762,10 @@ export default function App() {
       localStorage.setItem('AQUA_COACHES', JSON.stringify(updated));
       syncDeleteCoach(coachId);
 
-      // Hapus juga akun user terkait di Manajemen User
+      // Hapus juga akun user terkait di Manajemen User & Cloud Firestore
+      const usersToDelete = appUsers.filter((u) => u.coachId === coachId);
+      usersToDelete.forEach((u) => syncDeleteUser(u.id));
+
       setAppUsers((prev) => {
         const updatedUsers = prev.filter((u) => u.coachId !== coachId);
         localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
@@ -763,20 +781,26 @@ export default function App() {
     localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updated));
     syncSaveStudent(updatedStudent);
 
-    // Sinkronisasi data ke Manajemen User
+    // Sinkronisasi data ke Manajemen User & Cloud Firestore
     setAppUsers((prev) => {
-      const updatedUsers = prev.map((u) =>
-        u.studentId === updatedStudent.id || (u.barcode && u.barcode === updatedStudent.barcode)
-          ? {
-              ...u,
-              name: updatedStudent.name,
-              role: updatedStudent.roleClass,
-              phone: updatedStudent.phone,
-              avatarUrl: updatedStudent.avatarUrl,
-            }
-          : u
-      );
+      let matchedUser: AuthUser | null = null;
+      const updatedUsers = prev.map((u) => {
+        if (u.studentId === updatedStudent.id || (u.barcode && u.barcode === updatedStudent.barcode)) {
+          matchedUser = {
+            ...u,
+            name: updatedStudent.name,
+            role: updatedStudent.roleClass,
+            phone: updatedStudent.phone,
+            avatarUrl: updatedStudent.avatarUrl,
+          };
+          return matchedUser;
+        }
+        return u;
+      });
       localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+      if (matchedUser) {
+        syncSaveUser(matchedUser);
+      }
       return updatedUsers;
     });
   };
@@ -789,7 +813,10 @@ export default function App() {
       localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updated));
       syncDeleteStudent(id);
 
-      // Hapus juga akun user terkait di Manajemen User
+      // Hapus juga akun user terkait di Manajemen User & Cloud Firestore
+      const usersToDelete = appUsers.filter((u) => u.studentId === id);
+      usersToDelete.forEach((u) => syncDeleteUser(u.id));
+
       setAppUsers((prev) => {
         const updatedUsers = prev.filter((u) => u.studentId !== id);
         localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
@@ -1018,22 +1045,29 @@ export default function App() {
     const updated = coaches.map((c) => (c.id === updatedCoach.id ? updatedCoach : c));
     setCoaches(updated);
     localStorage.setItem('AQUA_COACHES', JSON.stringify(updated));
+    syncSaveCoach(updatedCoach);
 
-    // Also update appUsers if coach has user account
-    const updatedUsers = appUsers.map((u) =>
-      u.coachId === updatedCoach.id || u.name.toLowerCase() === updatedCoach.name.toLowerCase()
-        ? {
-            ...u,
-            name: updatedCoach.name,
-            avatarUrl: updatedCoach.avatarUrl,
-            phone: updatedCoach.phone,
-            email: updatedCoach.email || u.email,
-            barcode: updatedCoach.barcode || u.barcode,
-          }
-        : u
-    );
+    // Also update appUsers if coach has user account & Cloud Firestore
+    let matchedCoachUser: AuthUser | null = null;
+    const updatedUsers = appUsers.map((u) => {
+      if (u.coachId === updatedCoach.id || u.name.toLowerCase() === updatedCoach.name.toLowerCase()) {
+        matchedCoachUser = {
+          ...u,
+          name: updatedCoach.name,
+          avatarUrl: updatedCoach.avatarUrl,
+          phone: updatedCoach.phone,
+          email: updatedCoach.email || u.email,
+          barcode: updatedCoach.barcode || u.barcode,
+        };
+        return matchedCoachUser;
+      }
+      return u;
+    });
     setAppUsers(updatedUsers);
     localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    if (matchedCoachUser) {
+      syncSaveUser(matchedCoachUser);
+    }
 
     // If currentUser is this coach
     if (
@@ -1129,6 +1163,7 @@ export default function App() {
     const updatedStudents = [newStudent, ...students];
     setStudents(updatedStudents);
     localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+    syncSaveStudent(newStudent);
 
     // Create user login credentials
     const baseUsername = (reg.nickname || reg.fullName.split(' ')[0])
@@ -1137,7 +1172,7 @@ export default function App() {
     const cleanUsername = `${baseUsername || 'siswa'}${Math.floor(10 + Math.random() * 89)}`;
 
     const newUser: AuthUser = {
-      id: `usr-${Date.now().toString().slice(-5)}`,
+      id: `usr-std-${newStudent.id.replace(/[^a-zA-Z0-9]/g, '')}`,
       name: reg.fullName,
       username: cleanUsername,
       password: 'siswa123',
@@ -1152,6 +1187,7 @@ export default function App() {
     const updatedUsers = [newUser, ...appUsers];
     setAppUsers(updatedUsers);
     localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
+    syncSaveUser(newUser);
 
     // Mark registration as approved
     const updatedRegs = registrations.map((r) =>
@@ -1159,6 +1195,10 @@ export default function App() {
     );
     setRegistrations(updatedRegs);
     localStorage.setItem('AQUA_REGISTRATIONS', JSON.stringify(updatedRegs));
+    const targetApprovedReg = updatedRegs.find((r) => r.id === reg.id);
+    if (targetApprovedReg) {
+      syncSaveRegistration(targetApprovedReg);
+    }
 
     alert(
       `Pendaftaran ${reg.fullName} berhasil disetujui!\n\n` +
@@ -1198,6 +1238,7 @@ export default function App() {
         onToggleTheme={toggleTheme}
         academyProfile={academyProfile}
         onBackToProfile={() => setPreLoginView('profile')}
+        isCloudSynced={isCloudSynced}
       />
     );
   }
@@ -1316,6 +1357,7 @@ export default function App() {
             attendances={attendances}
             schedules={schedules}
             coaches={coaches}
+            pricingPackages={pricingPackages}
             activeCoachId={currentUser?.coachId || 'c1'}
             activeTab={activeView}
             onTabChange={(tab) => setActiveView(tab)}

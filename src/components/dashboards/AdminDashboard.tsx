@@ -30,6 +30,8 @@ import {
   INITIAL_REGISTRATIONS,
   INITIAL_COACHES,
   OFFICIAL_BANK_ACCOUNTS,
+  getClassDefaultQuota,
+  getEffectiveStudentQuota,
 } from '../../data/mockData';
 import { AdminProfileSettings } from './AdminProfileSettings';
 import { AdminPersonalProfile } from './AdminPersonalProfile';
@@ -679,12 +681,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const getStudentExecutedAttendance = (st: Student) => {
     const logs = attendances.filter(
       (a) =>
-        a.studentId === st.id ||
-        (a.studentBarcode && a.studentBarcode.toUpperCase() === st.barcode.toUpperCase()) ||
-        a.studentName.toLowerCase() === st.name.toLowerCase()
+        (a.studentId === st.id ||
+          (a.studentBarcode && a.studentBarcode.toUpperCase() === st.barcode.toUpperCase()) ||
+          a.studentName.toLowerCase() === st.name.toLowerCase()) &&
+        (a.status === 'hadir' || !a.status)
     );
-    const quotaUsed = Math.max(0, st.totalQuota - st.remainingQuota);
-    return Math.max(logs.length, quotaUsed);
+    if (typeof st.manualExecutedSessions === 'number') {
+      return Math.max(logs.length, st.manualExecutedSessions);
+    }
+    return logs.length;
   };
 
   // 1. STATISTIK ABSENSI (TOTAL ABSEN & JUMLAH DILAKSANAKAN SETIAP PESERTA)
@@ -1273,12 +1278,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Edit Total Attendance & Quota Handlers
   const handleOpenEditTotal = (st: Student) => {
     const executed = getStudentExecutedAttendance(st);
+    const effectiveTotal = getEffectiveStudentQuota(st, pricingPackages);
+    const calculatedRemaining = Math.max(0, effectiveTotal - executed);
     setEditingTotalAttendanceStudent(st);
     setEditTotalData({
       studentId: st.id,
       executedSessions: executed,
-      totalQuota: st.totalQuota,
-      remainingQuota: st.remainingQuota,
+      totalQuota: effectiveTotal,
+      remainingQuota: calculatedRemaining,
       notes: '',
     });
   };
@@ -1287,12 +1294,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!editingTotalAttendanceStudent) return;
 
-    const remaining = Math.max(0, Number(editTotalData.remainingQuota));
     const total = Math.max(1, Number(editTotalData.totalQuota));
+    const executed = Math.max(0, Number(editTotalData.executedSessions));
+    const remaining = Math.max(0, Number(editTotalData.remainingQuota));
 
     onUpdateTotalAttendance(
       editingTotalAttendanceStudent.id,
-      Number(editTotalData.executedSessions),
+      executed,
       total,
       remaining
     );
@@ -1639,8 +1647,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {students.map((st) => {
+                const effectiveTotal = getEffectiveStudentQuota(st, pricingPackages);
                 const executedCount = getStudentExecutedAttendance(st);
-                const percent = st.totalQuota > 0 ? Math.min(100, Math.round((executedCount / st.totalQuota) * 100)) : 0;
+                const remaining = Math.max(0, effectiveTotal - executedCount);
+                const percent = effectiveTotal > 0 ? Math.min(100, Math.round((executedCount / effectiveTotal) * 100)) : 0;
                 const roleMeta = ROLE_LABELS[st.roleClass];
 
                 return (
@@ -1681,8 +1691,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
-                          <span>Sisa: {st.remainingQuota} sesi</span>
-                          <span>Paket: {st.totalQuota} sesi ({percent}%)</span>
+                          <span>Sisa: {remaining} sesi</span>
+                          <span>Paket: {effectiveTotal} sesi ({percent}%)</span>
                         </div>
                         <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1.5">
                           <div
@@ -1927,7 +1937,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })
               .map((st) => {
                 const roleMeta = ROLE_LABELS[st.roleClass];
-                const quotaPercent = Math.round((st.remainingQuota / st.totalQuota) * 100);
+                const effectiveTotal = getEffectiveStudentQuota(st, pricingPackages);
+                const executedCount = getStudentExecutedAttendance(st);
+                const remainingCount = Math.max(0, effectiveTotal - executedCount);
+                const quotaPercent = effectiveTotal > 0 ? Math.min(100, Math.round((executedCount / effectiveTotal) * 100)) : 0;
                 return (
                   <div
                     key={st.id}
@@ -1994,18 +2007,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             Total Absen Dilaksanakan:
                           </span>
                           <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
-                            {getStudentExecutedAttendance(st)} Sesi Selesai
+                            {executedCount} Sesi Selesai
                           </span>
                         </div>
                         <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-                          <span>Sisa Kuota: {st.remainingQuota} Pertemuan</span>
-                          <span>Total Paket: {st.totalQuota} Pertemuan</span>
+                          <span>Sisa Kuota: {remainingCount} Pertemuan</span>
+                          <span>Total Paket: {effectiveTotal} Pertemuan</span>
                         </div>
                         <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                           <div
                             className="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full"
                             style={{
-                              width: `${st.totalQuota > 0 ? Math.min(100, Math.round((getStudentExecutedAttendance(st) / st.totalQuota) * 100)) : 0}%`,
+                              width: `${quotaPercent}%`,
                             }}
                           ></div>
                         </div>
@@ -2161,12 +2174,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       return matchSearch && matchClass;
                     })
                     .map((st) => {
+                      const effectiveTotalQuota = getEffectiveStudentQuota(st, pricingPackages);
                       const executedCount = getStudentExecutedAttendance(st);
+                      const remainingCount = Math.max(0, effectiveTotalQuota - executedCount);
                       const percent =
-                        st.totalQuota > 0
-                          ? Math.min(100, Math.round((executedCount / st.totalQuota) * 100))
+                        effectiveTotalQuota > 0
+                          ? Math.min(100, Math.round((executedCount / effectiveTotalQuota) * 100))
                           : 0;
                       const roleMeta = ROLE_LABELS[st.roleClass];
+                      const isCompleted = remainingCount <= 0 || executedCount >= effectiveTotalQuota;
 
                       return (
                         <tr
@@ -2219,8 +2235,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                           <td className="py-3.5 px-4 min-w-[150px]">
                             <div className="flex justify-between text-[11px] font-semibold mb-1">
-                              <span className="text-slate-600 dark:text-slate-300">
-                                {executedCount} dari {st.totalQuota} Pertemuan
+                              <span className="text-slate-600 dark:text-slate-300 font-medium">
+                                {executedCount} dari {effectiveTotalQuota} Pertemuan
                               </span>
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold">
                                 {percent}%
@@ -2228,7 +2244,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                             <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                               <div
-                                className="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-500"
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isCompleted ? 'bg-rose-500' : 'bg-gradient-to-r from-emerald-500 to-cyan-500'
+                                }`}
                                 style={{ width: `${percent}%` }}
                               ></div>
                             </div>
@@ -2236,20 +2254,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                           <td className="py-3.5 px-4 text-center font-bold">
                             <span
-                              className={`px-2.5 py-1 rounded-lg text-xs ${
-                                st.remainingQuota > 0
-                                  ? 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400'
-                                  : 'bg-rose-50 text-rose-500'
+                              className={`px-2.5 py-1 rounded-lg text-xs font-black inline-flex items-center gap-1 ${
+                                isCompleted
+                                  ? 'bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400'
+                                  : remainingCount <= 2
+                                  ? 'bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300'
+                                  : 'bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400'
                               }`}
                             >
-                              {st.remainingQuota} Pertemuan
+                              <span>{remainingCount} Pertemuan</span>
                             </span>
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600">
-                              Aktif
-                            </span>
+                            {isCompleted ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 inline-flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> Selesai (Habis)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Berjalan ({remainingCount} Sisa)
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
@@ -2872,7 +2898,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Notifikasi Siswa Yang Telah Menyelesaikan Sesi Pertemuan (Kuota Habis) */}
           {(() => {
-            const finishedStudents = students.filter((s) => s.remainingQuota <= 0);
+            const finishedStudents = students.filter((s) => {
+              const total = getEffectiveStudentQuota(s, pricingPackages);
+              const executed = getStudentExecutedAttendance(s);
+              const rem = Math.max(0, total - executed);
+              return (s.remainingQuota !== undefined && s.remainingQuota <= 0) || rem <= 0 || executed >= total;
+            });
             if (finishedStudents.length === 0) return null;
 
             return (
@@ -2894,18 +2925,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Siswa berikut telah menyelesaikan seluruh kuota pertemuannya. Silakan hubungi orang tua / wali atau catat perpanjangan iuran:
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-                      {finishedStudents.map((st) => (
-                        <span
-                          key={st.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/60 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                          <span>{st.name}</span>
-                          <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 font-extrabold">
-                            ({getStudentExecutedAttendance(st)}/{st.totalQuota} Sesi Selesai)
+                      {finishedStudents.map((st) => {
+                        const total = getEffectiveStudentQuota(st, pricingPackages);
+                        const executed = getStudentExecutedAttendance(st);
+                        return (
+                          <span
+                            key={st.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/60 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs"
+                          >
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                            <span>{st.name}</span>
+                            <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 font-extrabold">
+                              ({executed}/{total} Sesi Selesai)
+                            </span>
                           </span>
-                        </span>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -3136,8 +3171,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               return <span className="text-slate-400 font-mono text-[10px]">-</span>;
                             }
                             const executed = getStudentExecutedAttendance(st);
-                            const total = st.totalQuota || p.sessionsToAdd || 12;
-                            const remaining = st.remainingQuota ?? 0;
+                            const total = getEffectiveStudentQuota(st, pricingPackages);
+                            const remaining = Math.max(0, total - executed);
                             const isFinished = remaining <= 0 || executed >= total;
                             const percent = Math.min(100, Math.round((executed / total) * 100));
 
@@ -5293,24 +5328,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="font-semibold text-slate-700 dark:text-slate-300">Kelas / Program Siswa</label>
                   <select
                     value={newStudentData.roleClass}
-                    onChange={(e) =>
-                      setNewStudentData({ ...newStudentData, roleClass: e.target.value as UserRole })
-                    }
+                    onChange={(e) => {
+                      const newClass = e.target.value as UserRole;
+                      const defaultQuota = getClassDefaultQuota(newClass, pricingPackages);
+                      setNewStudentData({
+                        ...newStudentData,
+                        roleClass: newClass,
+                        totalQuota: defaultQuota,
+                      });
+                    }}
                     className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-medium"
                   >
                     <optgroup label="Pendaftaran Murid Baru (Terbuka)">
-                      <option value="dasar">Kelas Dasar</option>
-                      <option value="privat_4">Kelas Privat 4 Sesi</option>
-                      <option value="privat_8">Kelas Privat 8 Sesi</option>
-                      <option value="privat_12">Kelas Privat 12 Sesi</option>
+                      <option value="dasar">Kelas Dasar (12 Pertemuan)</option>
+                      <option value="privat_4">Kelas Privat 4 Sesi (4 Pertemuan)</option>
+                      <option value="privat_8">Kelas Privat 8 Sesi (8 Pertemuan)</option>
+                      <option value="privat_12">Kelas Privat 12 Sesi (12 Pertemuan)</option>
                     </optgroup>
                     <optgroup label="Jalur Kenaikan Tingkat (Khusus Evaluasi Pelatih)">
-                      <option value="pemula">Kelas Pemula (Kenaikan Tingkat)</option>
-                      <option value="prestasi">Kelas Prestasi (Atlet Binaan)</option>
+                      <option value="pemula">Kelas Pemula (12 Pertemuan)</option>
+                      <option value="prestasi">Kelas Prestasi (16 Pertemuan)</option>
                     </optgroup>
                   </select>
                 </div>
 
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Kuota Pertemuan Kelas</span>
+                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold">Otomatis Paket</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={newStudentData.totalQuota}
+                    onChange={(e) =>
+                      setNewStudentData({
+                        ...newStudentData,
+                        totalQuota: Math.max(1, Number(e.target.value)),
+                      })
+                    }
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border-2 border-cyan-500/40 rounded-xl dark:border-slate-700 font-black text-cyan-600 dark:text-cyan-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300">Usia (Tahun)</label>
                   <input
@@ -5321,6 +5385,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setNewStudentData({ ...newStudentData, age: Number(e.target.value) })}
                     className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700"
                   />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">Jenis Kelamin</label>
+                  <select
+                    value={newStudentData.gender}
+                    onChange={(e) =>
+                      setNewStudentData({
+                        ...newStudentData,
+                        gender: e.target.value as 'Laki-laki' | 'Perempuan',
+                      })
+                    }
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-medium"
+                  >
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
                 </div>
               </div>
 
@@ -6092,12 +6173,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     min="0"
                     required
                     value={editTotalData.remainingQuota}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const rem = Number(e.target.value);
+                      const exec = Math.max(0, editTotalData.totalQuota - rem);
                       setEditTotalData({
                         ...editTotalData,
-                        remainingQuota: Number(e.target.value),
-                      })
-                    }
+                        remainingQuota: rem,
+                        executedSessions: exec,
+                      });
+                    }}
                     className="w-full mt-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-cyan-500/40 rounded-xl dark:border-slate-700 font-black text-cyan-600 dark:text-cyan-400 text-sm"
                   />
                   <span className="text-[10px] text-slate-400">Sisa Kuota</span>
@@ -7359,8 +7443,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const st = students.find((s) => s.id === selectedReceipt.studentId);
                 if (!st) return null;
                 const executed = getStudentExecutedAttendance(st);
-                const total = st.totalQuota || selectedReceipt.sessionsToAdd || 12;
-                const isFinished = st.remainingQuota <= 0 || executed >= total;
+                const total = getEffectiveStudentQuota(st, pricingPackages);
+                const remaining = Math.max(0, total - executed);
+                const isFinished = remaining <= 0 || executed >= total;
                 return (
                   <div className="pt-2 mt-1 border-t border-dashed border-slate-200 space-y-1.5">
                     <div className="flex justify-between items-center py-0.5">
@@ -7382,7 +7467,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 font-bold text-[10px] flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>Sedang Berjalan ({st.remainingQuota} Sisa Sesi)</span>
+                          <span>Sedang Berjalan ({remaining} Sisa Sesi)</span>
                         </span>
                       )}
                     </div>

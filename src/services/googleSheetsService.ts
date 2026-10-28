@@ -56,8 +56,20 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Google Sign-In error:', error);
+    const errCode = error?.code || '';
+    const errMsg = error?.message || String(error);
+    if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain')) {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'domain Anda';
+      const enhancedError: any = new Error(
+        `Domain '${currentHost}' belum diizinkan di Firebase Authentication (auth/unauthorized-domain). Silakan tambahkan domain ini ke Firebase Console > Authentication > Settings > Authorized domains.`
+      );
+      enhancedError.code = 'auth/unauthorized-domain';
+      enhancedError.currentDomain = currentHost;
+      enhancedError.projectId = firebaseConfig.projectId;
+      throw enhancedError;
+    }
     throw error;
   } finally {
     isSigningIn = false;
@@ -239,14 +251,17 @@ export async function exportStudentsToSheets(rawSpreadsheetId: string, students:
     nowStr,
   ]);
 
+  const endRow = Math.max(1, rows.length + 1);
+  const targetRange = `'Daftar Siswa'!A1:N${endRow}`;
   const valueRange = {
-    range: "'Daftar Siswa'!A1:N" + (rows.length + 1),
+    range: targetRange,
     majorDimension: 'ROWS',
     values: [headers, ...rows],
   };
 
+  const encodedRange = encodeURIComponent(targetRange);
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'Daftar Siswa'!A1?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: {
@@ -306,14 +321,17 @@ export async function exportAttendanceToSheets(rawSpreadsheetId: string, records
     nowStr,
   ]);
 
+  const endRow = Math.max(1, rows.length + 1);
+  const targetRange = `'Log Absensi Kolam'!A1:L${endRow}`;
   const valueRange = {
-    range: "'Log Absensi Kolam'!A1:L" + (rows.length + 1),
+    range: targetRange,
     majorDimension: 'ROWS',
     values: [headers, ...rows],
   };
 
+  const encodedRange = encodeURIComponent(targetRange);
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'Log Absensi Kolam'!A1?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: {
@@ -366,8 +384,9 @@ export async function appendDailyMidnightSnapshotToSheets(
   ];
 
   // First ensure header row is present
+  const headerRange = "'Rekap Harian 00.00'!A1:H1";
   await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'Rekap Harian 00.00'!A1:H1?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(headerRange)}?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: {
@@ -375,7 +394,7 @@ export async function appendDailyMidnightSnapshotToSheets(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        range: "'Rekap Harian 00.00'!A1:H1",
+        range: headerRange,
         majorDimension: 'ROWS',
         values: [headers],
       }),
@@ -394,8 +413,9 @@ export async function appendDailyMidnightSnapshotToSheets(
   ];
 
   // Append new snapshot row
+  const appendRange = "'Rekap Harian 00.00'!A:H";
   const appendRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'Rekap Harian 00.00'!A:H:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
       method: 'POST',
       headers: {
@@ -403,6 +423,7 @@ export async function appendDailyMidnightSnapshotToSheets(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        range: appendRange,
         values: [row],
       }),
     }

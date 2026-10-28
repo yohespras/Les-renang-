@@ -211,8 +211,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        {/* Google Sheets Trigger - Admin & Pelatih */}
-        {(currentRole === 'admin' || currentRole === 'pelatih') && (
+        {/* Google Sheets Trigger - Admin Only */}
+        {currentRole === 'admin' && (
           <button
             onClick={onOpenSheets}
             title="Sinkronisasi Google Sheets & Simpan Otomatis Jam 00:00"

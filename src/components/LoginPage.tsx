@@ -37,6 +37,7 @@ interface LoginPageProps {
   onToggleTheme: () => void;
   academyProfile?: AcademyProfile;
   onBackToProfile?: () => void;
+  isCloudSynced?: boolean;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
@@ -47,6 +48,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onToggleTheme,
   academyProfile,
   onBackToProfile,
+  isCloudSynced = false,
 }) => {
   // Login method tabs: 'credentials' (Username/Password) or 'barcode' (Barcode Card / Scanner)
   const [loginMethod, setLoginMethod] = useState<'credentials' | 'barcode'>('credentials');
@@ -81,7 +83,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const pass = password.trim();
 
     if (!term) {
-      setErrorMessage('Silakan masukkan username atau email Anda.');
+      setErrorMessage('Silakan masukkan username, email, atau nomor barcode Anda.');
       return;
     }
     if (!pass) {
@@ -91,11 +93,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     setIsProcessing(true);
 
-    // 1. Check in custom appUsers (Admin, Pelatih, Siswa tersimpan di sistem)
+    // 1. Check in custom appUsers (Admin, Pelatih, Siswa tersimpan di sistem / cloud Firestore)
     const matchedAppUser = appUsers.find(
       (u) =>
-        (u.username?.toLowerCase() === term || u.email?.toLowerCase() === term) &&
-        (u.password === pass || (!u.password && (pass === 'admin123' || pass === 'coach123' || pass === 'siswa123')))
+        (u.username?.toLowerCase() === term ||
+         u.email?.toLowerCase() === term ||
+         u.barcode?.toLowerCase() === term ||
+         u.name.toLowerCase() === term) &&
+        (u.password === pass || (!u.password && (pass === 'admin123' || pass === 'coach123' || pass === 'siswa123' || pass === '123456')))
     );
 
     if (matchedAppUser) {
@@ -103,27 +108,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    // 2. Check student by barcode, name, or phone
+    // 2. Check student by barcode, name, nickname, or phone
     const matchedStudent = students.find(
       (s) =>
         s.barcode.toLowerCase() === term ||
         s.name.toLowerCase() === term ||
+        s.name.toLowerCase().replace(/\s+/g, '_') === term ||
+        s.name.toLowerCase().split(/\s+/)[0] === term ||
         s.phone.replace(/[^0-9]/g, '') === term.replace(/[^0-9]/g, '')
     );
 
-    if (matchedStudent && (pass === 'siswa123' || pass === '123456')) {
-      const user: AuthUser = {
-        id: `usr-${matchedStudent.id}`,
-        name: matchedStudent.name,
-        username: matchedStudent.barcode.toLowerCase(),
-        email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
-        role: matchedStudent.roleClass,
-        avatarUrl: matchedStudent.avatarUrl,
-        studentId: matchedStudent.id,
-        barcode: matchedStudent.barcode,
-      };
-      onLoginSuccess(user);
-      return;
+    if (matchedStudent) {
+      const studentUser = appUsers.find(
+        (u) => u.studentId === matchedStudent.id || (u.barcode && u.barcode === matchedStudent.barcode)
+      );
+      const expectedPass = studentUser?.password || 'siswa123';
+
+      if (pass === expectedPass || pass === 'siswa123' || pass === '123456') {
+        const user: AuthUser = studentUser || {
+          id: `usr-${matchedStudent.id}`,
+          name: matchedStudent.name,
+          username: matchedStudent.barcode.toLowerCase(),
+          email: `${matchedStudent.barcode.toLowerCase()}@tirta.com`,
+          role: matchedStudent.roleClass,
+          avatarUrl: matchedStudent.avatarUrl,
+          studentId: matchedStudent.id,
+          barcode: matchedStudent.barcode,
+        };
+        onLoginSuccess(user);
+        return;
+      }
     }
 
     setIsProcessing(false);
@@ -241,9 +255,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs font-bold">
                 <ShieldCheck className="w-3.5 h-3.5" /> Portal Masuk Akademi
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Cloud Sync Multi-Device
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                isCloudSynced
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isCloudSynced ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                {isCloudSynced ? `Cloud Firestore Terhubung (${appUsers.length} Akun)` : 'Menghubungkan ke Cloud...'}
               </span>
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">

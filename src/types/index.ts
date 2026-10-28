@@ -40,6 +40,7 @@ export interface Student {
   assignedCoachId: string;
   avatarUrl: string;
   notes: string;
+  manualExecutedSessions?: number;
 }
 
 export interface Coach {

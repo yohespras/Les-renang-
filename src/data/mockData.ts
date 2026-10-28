@@ -522,3 +522,59 @@ export const OFFICIAL_BANK_ACCOUNTS: BankAccountInfo[] = [
   },
 ];
 
+/**
+ * Master helper: Mendapatkan kuota standar sesi pertemuan berdasarkan paket/kelas renang
+ */
+export function getClassDefaultQuota(
+  roleClass: UserRole,
+  pricingPackages?: ClassPricingPackage[]
+): number {
+  if (pricingPackages && pricingPackages.length > 0) {
+    const pkg = pricingPackages.find((p) => p.roleClass === roleClass && p.isActive !== false);
+    if (pkg && pkg.sessionsCount && pkg.sessionsCount > 0) {
+      return pkg.sessionsCount;
+    }
+  }
+  switch (roleClass) {
+    case 'privat_4':
+      return 4;
+    case 'privat_8':
+      return 8;
+    case 'privat_12':
+      return 12;
+    case 'prestasi':
+      return 16;
+    case 'dasar':
+      return 12;
+    case 'pemula':
+      return 12;
+    default:
+      return 12;
+  }
+}
+
+/**
+ * Master helper: Menghitung kuota total efektif seorang murid dengan sinkronisasi kelas
+ */
+export function getEffectiveStudentQuota(
+  student: Student,
+  pricingPackages?: ClassPricingPackage[]
+): number {
+  if (student.roleClass === 'privat_4' && (!student.totalQuota || student.totalQuota === 12)) {
+    return 4;
+  }
+  if (student.roleClass === 'privat_8' && (!student.totalQuota || student.totalQuota === 12)) {
+    return 8;
+  }
+  if (student.roleClass === 'privat_12' && (!student.totalQuota || student.totalQuota <= 0)) {
+    return 12;
+  }
+  if (student.roleClass === 'prestasi' && (!student.totalQuota || student.totalQuota === 12)) {
+    return 16;
+  }
+  if (student.totalQuota && student.totalQuota > 0) {
+    return student.totalQuota;
+  }
+  return getClassDefaultQuota(student.roleClass, pricingPackages);
+}
+

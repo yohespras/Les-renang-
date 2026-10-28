@@ -1,6 +1,6 @@
 import { toPng } from 'html-to-image';
 import { Student, UserRole } from '../types';
-import { ROLE_LABELS } from '../data/mockData';
+import { ROLE_LABELS, getClassDefaultQuota } from '../data/mockData';
 
 export interface CardExportData {
   id: string;
@@ -463,7 +463,13 @@ export const drawCardOnCanvas = (
           ctx.fillText(ageText, 192, 262);
 
           // Quota Tag
-          const quotaText = `${std.remainingQuota ?? 10} / ${std.totalQuota ?? 12} Sesi`;
+          const effTotal = (typeof std.totalQuota === 'number' && std.totalQuota > 0)
+            ? std.totalQuota
+            : getClassDefaultQuota(std.roleClass);
+          const effRemaining = (typeof std.remainingQuota === 'number' && !isNaN(std.remainingQuota))
+            ? Math.max(0, Math.min(effTotal, std.remainingQuota))
+            : effTotal;
+          const quotaText = `${effRemaining} / ${effTotal} Sesi`;
           roundRect(300, 240, 130, 32, 8);
           ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
           ctx.fill();

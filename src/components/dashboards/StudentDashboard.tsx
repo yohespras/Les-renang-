@@ -9,7 +9,7 @@ import {
   AcademyProfile,
   BankAccountInfo,
 } from '../../types';
-import { ROLE_LABELS, OFFICIAL_BANK_ACCOUNTS, INITIAL_PRICING_PACKAGES } from '../../data/mockData';
+import { ROLE_LABELS, OFFICIAL_BANK_ACCOUNTS, INITIAL_PRICING_PACKAGES, getEffectiveStudentQuota } from '../../data/mockData';
 import { BarcodeCard } from '../BarcodeCard';
 import {
   Waves,
@@ -207,11 +207,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const activeSelectedPackage =
     effectivePackages.find((p) => p.id === selectedPackageId) || studentPackage;
 
-  // Quota calculation
-  const totalQuota = student.totalQuota || 12;
-  const remainingQuota = student.remainingQuota ?? 0;
+  // Quota calculation - Selaras dengan kelas renang & absensi
+  const totalQuota = getEffectiveStudentQuota(student, effectivePackages);
+  const actualAttended = attendances.filter((a) => a.status === 'hadir' || !a.status).length;
+  const usedSessions =
+    typeof student.manualExecutedSessions === 'number'
+      ? Math.max(actualAttended, student.manualExecutedSessions)
+      : actualAttended;
+  const remainingQuota = Math.max(0, totalQuota - usedSessions);
   const isQuotaDepleted = remainingQuota <= 0;
-  const usedSessions = Math.max(0, totalQuota - remainingQuota);
   const quotaPercent = Math.min(100, Math.round((usedSessions / totalQuota) * 100));
 
   // Check if there is an unverified pending payment with proof uploaded

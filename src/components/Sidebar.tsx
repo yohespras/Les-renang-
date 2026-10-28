@@ -182,6 +182,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: Activity,
           },
           {
+            id: 'attendance',
+            label: 'Absen & Total Absen',
+            desc: 'Rekap kehadiran, total pertemuan & sisa sesi',
+            icon: CalendarCheck,
+          },
+          {
             id: 'profile',
             label: 'Profil Pelatih',
             desc: 'Biodata pelatih, barcode & upload foto',
@@ -205,13 +211,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: 'Evaluasi Teknik Renang',
             desc: 'Nilai pernapasan, kayuhan & stamina',
             icon: CheckCircle2,
-          },
-          {
-            id: 'sheets',
-            label: 'Google Sheets Sinkron',
-            desc: 'Ekspor data presensi ke Google Drive',
-            icon: FileSpreadsheet,
-            action: onOpenSheets,
           },
         ];
 
