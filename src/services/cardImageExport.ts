@@ -1,6 +1,6 @@
 import { toPng } from 'html-to-image';
 import { Student, UserRole } from '../types';
-import { ROLE_LABELS, getClassDefaultQuota } from '../data/mockData';
+import { ROLE_LABELS, getClassDefaultQuota, getLiveAcademyProfile } from '../data/mockData';
 
 export interface CardExportData {
   id: string;
@@ -24,18 +24,89 @@ export interface CardExportData {
   joinedDate?: string;
   certifications?: string[];
   experienceYears?: number;
+  academyName?: string;
+  brandTitle?: string;
 }
 
 /**
- * Downloads a data URL as an image file on the user's device
+ * Converts a base64 DataURL to a Blob for reliable cross-device downloads
  */
-export const triggerImageDownload = (dataUrl: string, fileName: string) => {
-  const link = document.createElement('a');
-  link.download = fileName;
-  link.href = dataUrl;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+export const dataUrlToBlob = (dataUrl: string): Blob => {
+  try {
+    const parts = dataUrl.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (e) {
+    return new Blob([], { type: 'image/png' });
+  }
+};
+
+/**
+ * Shares or saves an image using native Web Share API on iOS / Android
+ */
+export const shareImageFileUniversal = async (dataUrl: string, fileName: string): Promise<boolean> => {
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    const file = new File([blob], fileName, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: fileName,
+        text: 'Kartu Resmi KTA / Swim Pass Barcode',
+      });
+      return true;
+    }
+  } catch (err) {
+    console.warn('Native file share cancelled or unsupported:', err);
+  }
+  return false;
+};
+
+/**
+ * Downloads a data URL as an image file on ANY user device (Android, iOS/iPhone/iPad, Windows, Mac, WebView, Iframe)
+ */
+export const triggerImageDownload = (dataUrl: string, fileName: string, skipModal = false) => {
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    const blobUrl = URL.createObjectURL(blob);
+
+    // 1. Trigger standard Blob anchor download (works on Desktop, Android Chrome, Edge, Firefox)
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = blobUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // 2. Dispatch Universal Download Modal event so iOS Safari, In-App WebViews (WA/IG), and Iframe users
+    // always have 100% guaranteed download / Save to Gallery / Long-press options on any device
+    if (!skipModal && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('aqua:universal-file-download', {
+          detail: { dataUrl, blobUrl, fileName },
+        })
+      );
+    } else {
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+    }
+  } catch (err) {
+    // Fallback to direct dataUrl
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 };
 
 /**
@@ -372,16 +443,21 @@ export const drawCardOnCanvas = (
     ctx.fillText('🌊', 52, 84);
 
     // Title & Club text
+    const liveProfile = getLiveAcademyProfile();
+    const castedCard = student as CardExportData;
+    const brandLabel = (castedCard.brandTitle || liveProfile.effectiveBrandTitle || 'AQUAFLOW').toUpperCase();
+    const clubLabel = castedCard.academyName || liveProfile.effectiveKtaName || liveProfile.effectiveName;
+
     ctx.fillStyle = palette.titleColor;
     ctx.font = 'bold 28px sans-serif';
     const mainTitle = isStaff
-      ? (student.roleClass === 'admin' ? 'AQUAFLOW ADMIN PASS' : 'AQUAFLOW COACH PASS')
-      : 'AQUAFLOW PASS';
+      ? (student.roleClass === 'admin' ? `${brandLabel} ADMIN PASS` : `${brandLabel} COACH PASS`)
+      : `${brandLabel} PASS`;
     ctx.fillText(mainTitle, 124, 68);
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.font = '500 18px sans-serif';
-    ctx.fillText('Tirta Samudra Swimming Club', 124, 96);
+    ctx.fillText(clubLabel, 124, 96);
 
     // Role / Class Badge
     const classInfo = ROLE_LABELS[student.roleClass] || { textBadge: 'SISWA' };
@@ -543,7 +619,7 @@ export const drawCardOnCanvas = (
           ctx.font = '500 16px sans-serif';
           ctx.textAlign = 'center';
           const instructionText = isStaff
-            ? 'Kartu Pengenal Resmi Staff / Pelatih Tirta Samudra Swimming Club'
+            ? `Kartu Pengenal Resmi Staff / Pelatih ${clubLabel}`
             : 'Arahkan ke Kamera atau Tembak Scanner Barcode Kabel/Bluetooth';
           ctx.fillText(instructionText, width / 2, barcodeY + 145);
           ctx.textAlign = 'left';
@@ -555,7 +631,7 @@ export const drawCardOnCanvas = (
             const casted = student as CardExportData;
             ctx.fillText(`No. Telp: ${casted.phone || '-'}`, 45, 1030);
             ctx.textAlign = 'right';
-            ctx.fillText(`Email: ${casted.email || 'info@tirta.com'}`, width - 45, 1030);
+            ctx.fillText(`Email: ${casted.email || liveProfile.email || 'info@tirta.com'}`, width - 45, 1030);
             ctx.textAlign = 'left';
           } else {
             const std = student as any;
@@ -573,7 +649,9 @@ export const drawCardOnCanvas = (
           ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
           ctx.font = '14px monospace';
           ctx.textAlign = 'center';
-          const footerTag = isStaff ? 'Official Tirta Samudra Staff Pass ID' : 'Official Tirta Samudra Smart Pass ID';
+          const footerTag = isStaff
+            ? `Official ${clubLabel} Staff Pass ID`
+            : `Official ${clubLabel} Smart Pass ID`;
           ctx.fillText(footerTag, width / 2, 1080);
 
           resolve(canvas.toDataURL('image/png'));

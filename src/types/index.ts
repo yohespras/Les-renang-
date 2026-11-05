@@ -161,6 +161,8 @@ export interface ClassPricingPackage {
 
 export interface AcademyProfile {
   name: string;
+  brandTitle?: string;
+  ktaTitle?: string;
   tagline: string;
   description: string;
   aboutStory: string;

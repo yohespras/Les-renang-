@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import QRCode from 'qrcode';
-import { Student, Coach, AuthUser } from '../types';
-import { ROLE_LABELS, getEffectiveStudentQuota } from '../data/mockData';
+import { Student, Coach, AuthUser, AcademyProfile } from '../types';
+import { ROLE_LABELS, getEffectiveStudentQuota, getLiveAcademyProfile } from '../data/mockData';
 import {
   Printer,
   Waves,
@@ -31,6 +31,7 @@ interface BarcodeCardProps {
   coach?: Coach;
   user?: AuthUser;
   cardData?: CardExportData;
+  academyProfile?: AcademyProfile;
   onClose?: () => void;
   standalone?: boolean;
 }
@@ -40,6 +41,7 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
   coach,
   user,
   cardData,
+  academyProfile,
   onClose,
   standalone = false,
 }) => {
@@ -49,10 +51,25 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
   const [exportSuccessNotice, setExportSuccessNotice] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [, setProfileTick] = useState(0);
+
+  useEffect(() => {
+    const onUpdate = () => setProfileTick((t) => t + 1);
+    window.addEventListener('aqua:profile-updated', onUpdate);
+    return () => window.removeEventListener('aqua:profile-updated', onUpdate);
+  }, []);
+
+  const liveProfile = getLiveAcademyProfile(academyProfile);
 
   // Normalize whatever input is given into CardExportData
   const effectiveCard: CardExportData = useMemo(() => {
-    if (cardData) return cardData;
+    if (cardData) {
+      return {
+        ...cardData,
+        academyName: cardData.academyName || liveProfile.effectiveKtaName,
+        brandTitle: cardData.brandTitle || liveProfile.effectiveBrandTitle,
+      };
+    }
     if (student) {
       return {
         id: student.id,
@@ -70,6 +87,8 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
         parentName: student.parentName,
         emergencyContact: student.emergencyContact,
         isStaff: false,
+        academyName: liveProfile.effectiveKtaName,
+        brandTitle: liveProfile.effectiveBrandTitle,
       };
     }
     if (coach) {
@@ -83,6 +102,8 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
         specialty: coach.specialty,
         phone: coach.phone,
         email: coach.email || `${coach.name.split(' ')[0].toLowerCase()}@tirta.com`,
+        academyName: liveProfile.effectiveKtaName,
+        brandTitle: liveProfile.effectiveBrandTitle,
       };
     }
     if (user) {
@@ -106,19 +127,23 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
         specialty:
           user.role === 'admin'
             ? 'Kepala Manajemen & Operasional Kolam'
-            : 'Staff Pelatih Resmi Tirta Samudra',
+            : `Staff Pelatih Resmi ${liveProfile.effectiveName}`,
+        academyName: liveProfile.effectiveKtaName,
+        brandTitle: liveProfile.effectiveBrandTitle,
       };
     }
     return {
       id: 'pass-01',
-      name: 'Peserta Tirta Samudra',
+      name: `Peserta ${liveProfile.effectiveName}`,
       barcode: 'AQUA-MBR-001',
       avatarUrl:
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       roleClass: 'dasar',
       isStaff: false,
+      academyName: liveProfile.effectiveKtaName,
+      brandTitle: liveProfile.effectiveBrandTitle,
     };
-  }, [student, coach, user, cardData]);
+  }, [student, coach, user, cardData, liveProfile.effectiveName, liveProfile.effectiveKtaName, liveProfile.effectiveBrandTitle]);
 
   const isStaff =
     effectiveCard.isStaff ||
@@ -321,12 +346,12 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
               >
                 {isStaff
                   ? effectiveCard.roleClass === 'admin'
-                    ? 'AQUAFLOW ADMIN PASS'
-                    : 'AQUAFLOW COACH PASS'
-                  : 'AQUAFLOW PASS'}
+                    ? `${liveProfile.effectiveBrandTitle} ADMIN PASS`
+                    : `${liveProfile.effectiveBrandTitle} COACH PASS`
+                  : `${liveProfile.effectiveBrandTitle} PASS`}
               </h4>
               <p className="text-[10px] text-white/70 font-medium">
-                Tirta Samudra Swimming Club
+                {effectiveCard.academyName || liveProfile.effectiveKtaName}
               </p>
             </div>
           </div>

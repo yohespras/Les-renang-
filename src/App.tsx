@@ -35,6 +35,7 @@ import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { LoginPage } from './components/LoginPage';
 import { PublicProfilePage } from './components/PublicProfilePage';
 import { AppFooter } from './components/AppFooter';
+import { UniversalDownloadModal } from './components/UniversalDownloadModal';
 import { PanelLeftOpen, Clock, CheckCircle2, X } from 'lucide-react';
 import {
   initDailyAutoSaveScheduler,
@@ -149,8 +150,18 @@ export default function App() {
   const handleUpdateAcademyProfile = (updated: AcademyProfile) => {
     setAcademyProfile(updated);
     localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(updated));
+    try {
+      window.dispatchEvent(new Event('aqua:profile-updated'));
+    } catch (e) {}
     syncSaveAcademyProfile(updated);
   };
+
+  // Sync browser tab & PWA title dynamically with academyProfile.name
+  useEffect(() => {
+    if (academyProfile?.name) {
+      document.title = `${academyProfile.name} - Manajemen Les Renang & Absensi Barcode`;
+    }
+  }, [academyProfile?.name]);
 
   // Online Registrations State (persisted in localStorage)
   const [registrations, setRegistrations] = useState<StudentRegistration[]>(() => {
@@ -1541,7 +1552,7 @@ export default function App() {
 
           {displayStudent && (
             <div className="max-w-md w-full">
-              <BarcodeCard student={displayStudent} standalone={true} />
+              <BarcodeCard student={displayStudent} standalone={true} academyProfile={academyProfile} />
             </div>
           )}
         </div>
@@ -1675,6 +1686,8 @@ export default function App() {
         currentStudent={currentStudent}
         currentUser={currentUser}
         onLogout={handleLogout}
+        academyProfile={academyProfile}
+        onUpdateAcademyProfile={handleUpdateAcademyProfile}
         pendingRegistrationsCount={
           registrations.filter(
             (r) =>
@@ -1713,6 +1726,7 @@ export default function App() {
           onUpdateAvatar={handleUpdateAvatar}
           currentUser={currentUser}
           onLogout={handleLogout}
+          academyProfile={academyProfile}
         />
 
         {/* Page Body */}
@@ -1790,11 +1804,15 @@ export default function App() {
                   : undefined
               }
               user={barcodeCardModal.username ? barcodeCardModal : undefined}
+              academyProfile={academyProfile}
               onClose={() => setBarcodeCardModal(null)}
             />
           </div>
         </div>
       )}
+
+      {/* Universal Multi-Device Download & Save Modal */}
+      <UniversalDownloadModal />
     </div>
   );
 }

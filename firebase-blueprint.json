@@ -113,6 +113,8 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
+        "brandTitle": { "type": "string" },
+        "ktaTitle": { "type": "string" },
         "tagline": { "type": "string" },
         "description": { "type": "string" },
         "aboutStory": { "type": "string" },

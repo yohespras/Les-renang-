@@ -89,6 +89,8 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
 
   // Form states for profile
   const [name, setName] = useState(academyProfile.name);
+  const [ktaTitle, setKtaTitle] = useState(academyProfile.ktaTitle || academyProfile.name);
+  const [brandTitle, setBrandTitle] = useState(academyProfile.brandTitle || 'AQUAFLOW');
   const [tagline, setTagline] = useState(academyProfile.tagline);
   const [description, setDescription] = useState(academyProfile.description);
   const [aboutStory, setAboutStory] = useState(academyProfile.aboutStory);
@@ -104,6 +106,26 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
   const [footerName, setFooterName] = useState(academyProfile.footerName || 'Yohes');
   const [facilities, setFacilities] = useState<string[]>(academyProfile.facilities);
   const [newFacilityInput, setNewFacilityInput] = useState('');
+
+  React.useEffect(() => {
+    setName(academyProfile.name);
+    setKtaTitle(academyProfile.ktaTitle || academyProfile.name);
+    setBrandTitle(academyProfile.brandTitle || 'AQUAFLOW');
+    setTagline(academyProfile.tagline);
+    setDescription(academyProfile.description);
+    setAboutStory(academyProfile.aboutStory);
+    setLogoUrl(academyProfile.logoUrl);
+    setHeroImageUrl(academyProfile.heroImageUrl);
+    setPhone(academyProfile.phone);
+    setWhatsapp(academyProfile.whatsapp);
+    setEmail(academyProfile.email);
+    setAddress(academyProfile.address);
+    setOperatingHours(academyProfile.operatingHours);
+    setRegistrationFee(academyProfile.registrationFee);
+    setIsRegistrationOpen(academyProfile.isRegistrationOpen);
+    setFooterName(academyProfile.footerName || 'Yohes');
+    setFacilities(academyProfile.facilities);
+  }, [academyProfile]);
 
   // Filter state for registrations
   const [regFilterStatus, setRegFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -285,8 +307,13 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = name.trim() || 'Tirta Samudra Academy';
+    const cleanKta = ktaTitle.trim() || cleanName;
+    const cleanBrand = brandTitle.trim() || 'AQUAFLOW';
     const updated: AcademyProfile = {
-      name: name.trim(),
+      name: cleanName,
+      ktaTitle: cleanKta,
+      brandTitle: cleanBrand,
       tagline: tagline.trim(),
       description: description.trim(),
       aboutStory: aboutStory.trim(),
@@ -304,6 +331,8 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
     };
 
     onUpdateAcademyProfile(updated);
+    localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(updated));
+    window.dispatchEvent(new Event('aqua:profile-updated'));
     setSaveSuccessNotice(true);
     setTimeout(() => setSaveSuccessNotice(false), 3500);
   };
@@ -439,41 +468,116 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
             </div>
           )}
 
-          {/* 1. Identitas Akademi */}
+          {/* 1. Identitas Akademi & Kartu KTA */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-cyan-500" />
-              <span>Identitas &amp; Slogan Akademi</span>
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-cyan-500" />
+                <span>Identitas Nama Akademi, Sidebar &amp; Kartu KTA (Seluruh Tampilan)</span>
+              </h3>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                Sinkron Otomatis ke Semua Menu &amp; KTA
+              </span>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Nama Akademi / Sekolah Renang *
+                  Nama Akademi / Klub Renang Utama (Seluruh Tampilan &amp; Sidebar) *
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Contoh: AquaFlow Swimming Academy"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (ktaTitle === name || !ktaTitle.trim()) {
+                      setKtaTitle(val);
+                    }
+                    setName(val);
+                  }}
+                  placeholder="Contoh: Tirta Samudra Academy"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Mengganti nama di Sidebar, Header, Login, Kwitansi &amp; Profil Publik.
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Nama Klub pada KTA (Kartu Anggota Barcode) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setKtaTitle(name)}
+                    className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    Samakan
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={ktaTitle}
+                  onChange={(e) => setKtaTitle(e.target.value)}
+                  placeholder="Contoh: Tirta Samudra Swimming Club"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Tampil di KTA Siswa, Pelatih, Admin &amp; hasil Unduh Gambar KTA (PNG HD).
+                </span>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Tagline / Slogan Utama *
+                  Judul Brand / Header Pass (Pojok Kiri Atas &amp; KTA)
                 </label>
                 <input
                   type="text"
-                  required
-                  value={tagline}
-                  onChange={(e) => setTagline(e.target.value)}
-                  placeholder="Contoh: Mencetak Perenang Tangguh & Berprestasi"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+                  value={brandTitle}
+                  onChange={(e) => setBrandTitle(e.target.value)}
+                  placeholder="Contoh: AQUAFLOW"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold uppercase focus:ring-2 focus:ring-cyan-500 outline-none"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Tampil di atas nama akademi pada Sidebar &amp; judul KTA ({(brandTitle || 'AQUAFLOW').toUpperCase()} PASS).
+                </span>
               </div>
+            </div>
+
+            {/* Live Preview Box for Sidebar & KTA */}
+            <div className="p-3.5 rounded-2xl bg-slate-900 text-white border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">
+                  Pratinjau Langsung pada Kartu KTA &amp; Sidebar:
+                </span>
+                <p className="text-xs font-extrabold text-sky-300 uppercase mt-0.5">
+                  {(brandTitle || 'AQUAFLOW').toUpperCase()} PASS &bull; <span className="text-white font-semibold normal-case">{ktaTitle || name || 'Tirta Samudra Academy'}</span>
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer shrink-0 flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Terapkan Nama Sekarang</span>
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Tagline / Slogan Utama *
+              </label>
+              <input
+                type="text"
+                required
+                value={tagline}
+                onChange={(e) => setTagline(e.target.value)}
+                placeholder="Contoh: Mencetak Perenang Tangguh & Berprestasi"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+              />
             </div>
 
             <div>

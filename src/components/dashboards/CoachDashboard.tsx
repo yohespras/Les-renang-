@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { compressAndResizeImage } from '../../services/imageUtils';
 import { CoachPersonalProfile } from './CoachPersonalProfile';
-import { ROLE_LABELS, getEffectiveStudentQuota } from '../../data/mockData';
+import { ROLE_LABELS, getEffectiveStudentQuota, getLiveAcademyProfile } from '../../data/mockData';
 
 interface CoachDashboardProps {
   students: Student[];
@@ -1008,7 +1008,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                     Jadwal Mengajar &amp; Jalur Kolam
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Alokasi waktu dan jalur perenang di Kolam Tirta Samudra
+                    Alokasi waktu dan jalur perenang di {getLiveAcademyProfile().effectiveName}
                   </p>
                 </div>
                 <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
@@ -1147,7 +1147,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                 Daftar Jadwal Mengajar &amp; Jalur Renang
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Alokasi waktu dan jalur perenang di Kolam Tirta Samudra
+                Alokasi waktu dan jalur perenang di {getLiveAcademyProfile().effectiveName}
               </p>
             </div>
           </div>

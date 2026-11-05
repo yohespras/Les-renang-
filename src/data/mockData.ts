@@ -386,7 +386,9 @@ export const INITIAL_PRICING_PACKAGES: ClassPricingPackage[] = [
 // 6. PROFIL AKADEMI
 // ============================================================================
 export const DEFAULT_ACADEMY_PROFILE: AcademyProfile = {
-  name: 'AquaFlow Swimming Academy',
+  name: 'Tirta Samudra Academy',
+  brandTitle: 'AQUAFLOW',
+  ktaTitle: 'Tirta Samudra Academy',
   tagline: 'Mencetak Perenang Tangguh, Berkarakter & Berprestasi Tingkat Nasional',
   description: 'Akademi renang terkemuka dengan kurikulum terstruktur, pelatih bersertifikasi PRSI, sistem absensi barcode/QR unik, dan fasilitas kolam semi-olympic air jernih ramah keluarga.',
   aboutStory: 'Didirikan sejak tahun 2018, AquaFlow berkomitmen melatih anak-anak hingga dewasa dari adaptasi air nol sampai menjadi atlet renang berprestasi. Kami mengedepankan keamanan maksimal, rasio pelatih ideal, dan teknologi modern untuk memantau perkembangan setiap murid.',
@@ -580,4 +582,44 @@ export function getEffectiveStudentQuota(
   }
   return getClassDefaultQuota(student.roleClass, pricingPackages);
 }
+
+/**
+ * Master helper: Mendapatkan profil akademi aktif (live) untuk seluruh tampilan & KTA
+ */
+export function getLiveAcademyProfile(profile?: AcademyProfile | null): AcademyProfile & {
+  effectiveName: string;
+  effectiveKtaName: string;
+  effectiveBrandTitle: string;
+  initials: string;
+} {
+  let base: AcademyProfile = DEFAULT_ACADEMY_PROFILE;
+  if (profile) {
+    base = { ...DEFAULT_ACADEMY_PROFILE, ...profile };
+  } else if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('AQUA_ACADEMY_PROFILE');
+      if (raw) {
+        base = { ...DEFAULT_ACADEMY_PROFILE, ...JSON.parse(raw) };
+      }
+    } catch (e) {}
+  }
+
+  const effectiveName = (base.name || 'Tirta Samudra Academy').trim();
+  const effectiveKtaName = (base.ktaTitle?.trim() || effectiveName).trim();
+  const effectiveBrandTitle = (base.brandTitle?.trim() || 'AQUAFLOW').trim();
+  const words = effectiveKtaName.split(/\s+/).filter(Boolean);
+  const initials =
+    words.length >= 2
+      ? `${words[0][0]}${words[1][0]}`.toUpperCase()
+      : (words[0]?.substring(0, 2) || 'TS').toUpperCase();
+
+  return {
+    ...base,
+    effectiveName,
+    effectiveKtaName,
+    effectiveBrandTitle,
+    initials,
+  };
+}
+
 

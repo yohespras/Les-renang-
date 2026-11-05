@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { UserRole, Student, AuthUser } from '../types';
-import { ROLE_LABELS } from '../data/mockData';
+import { UserRole, Student, AuthUser, AcademyProfile } from '../types';
+import { ROLE_LABELS, getLiveAcademyProfile } from '../data/mockData';
 import {
   Menu,
   PanelLeftClose,
@@ -48,6 +48,7 @@ interface NavbarProps {
   onUpdateAvatar?: (newAvatarUrl: string) => void;
   currentUser: AuthUser | null;
   onLogout: () => void;
+  academyProfile?: AcademyProfile;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -68,8 +69,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onUpdateAvatar,
   currentUser,
   onLogout,
+  academyProfile,
 }) => {
   const roleMeta = ROLE_LABELS[currentRole];
+  const liveProfile = getLiveAcademyProfile(academyProfile);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile modal state
@@ -183,7 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
-            <span>AquaFlow</span>
+            <span className="truncate max-w-[160px] font-semibold">{liveProfile.effectiveName}</span>
             <span>/</span>
           </div>
           <span className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">

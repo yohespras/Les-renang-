@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Student, AttendanceRecord, TimeTrialRecord } from '../../types';
 import { BarcodeCard } from '../BarcodeCard';
-import { INITIAL_TIME_TRIALS } from '../../data/mockData';
+import { INITIAL_TIME_TRIALS, getLiveAcademyProfile } from '../../data/mockData';
 import {
   Trophy,
   Timer,
@@ -90,7 +90,7 @@ export const PrestasiDashboard: React.FC<PrestasiDashboardProps> = ({ student, a
               <Trophy className="w-3.5 h-3.5" /> Divisi Atlet Prestasi & Atletik Nasional
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              {student.name} — Atlet Tirta Samudra 🥇
+              {student.name} — Atlet {getLiveAcademyProfile().effectiveName} 🥇
             </h1>
             <p className="text-sm text-amber-100 mt-1 leading-relaxed">
               Fokus pada akselerasi start, ketajaman flip turn, dan pemecahan Personal Best (PB).
@@ -291,7 +291,7 @@ export const PrestasiDashboard: React.FC<PrestasiDashboardProps> = ({ student, a
               Swim Pass Atlet
             </h3>
             <p className="text-[11px] text-slate-500 mb-4 text-center">
-              Barcode lisensi resmi atlet Tirta Samudra
+              Barcode lisensi resmi atlet {getLiveAcademyProfile().effectiveKtaName}
             </p>
             <BarcodeCard student={student} standalone={true} />
           </div>

@@ -1,6 +1,6 @@
-import React from 'react';
-import { UserRole, Student, AuthUser } from '../types';
-import { ROLE_LABELS } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { UserRole, Student, AuthUser, AcademyProfile } from '../types';
+import { ROLE_LABELS, getLiveAcademyProfile } from '../data/mockData';
 import {
   Waves,
   TrendingUp,
@@ -38,6 +38,8 @@ import {
   UserCheck,
   User,
   UserPlus,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -58,6 +60,8 @@ interface SidebarProps {
   currentUser: AuthUser | null;
   onLogout: () => void;
   pendingRegistrationsCount?: number;
+  academyProfile?: AcademyProfile;
+  onUpdateAcademyProfile?: (profile: AcademyProfile) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -77,9 +81,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   onLogout,
   pendingRegistrationsCount = 0,
+  academyProfile,
+  onUpdateAcademyProfile,
 }) => {
   const roleConfig = ROLE_LABELS[currentRole];
-  const [cardsMenuExpanded, setCardsMenuExpanded] = React.useState(true);
+  const [cardsMenuExpanded, setCardsMenuExpanded] = useState(true);
+  const [showQuickNameModal, setShowQuickNameModal] = useState(false);
+  const liveProfile = getLiveAcademyProfile(academyProfile);
+
+  const [editName, setEditName] = useState(liveProfile.effectiveName);
+  const [editKtaTitle, setEditKtaTitle] = useState(liveProfile.effectiveKtaName);
+  const [editBrandTitle, setEditBrandTitle] = useState(liveProfile.effectiveBrandTitle);
+
+  useEffect(() => {
+    setEditName(liveProfile.effectiveName);
+    setEditKtaTitle(liveProfile.effectiveKtaName);
+    setEditBrandTitle(liveProfile.effectiveBrandTitle);
+  }, [liveProfile.effectiveName, liveProfile.effectiveKtaName, liveProfile.effectiveBrandTitle]);
+
+  const handleSaveQuickName = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = editName.trim() || 'Tirta Samudra Academy';
+    const cleanKta = editKtaTitle.trim() || cleanName;
+    const cleanBrand = editBrandTitle.trim() || 'AQUAFLOW';
+    const updated: AcademyProfile = {
+      ...liveProfile,
+      name: cleanName,
+      ktaTitle: cleanKta,
+      brandTitle: cleanBrand,
+    };
+    onUpdateAcademyProfile?.(updated);
+    localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(updated));
+    window.dispatchEvent(new Event('aqua:profile-updated'));
+    setShowQuickNameModal(false);
+  };
 
   // Dynamic Navigation menu items specifically tailored per active class / role
   const getNavItems = () => {
@@ -279,23 +314,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className={`border-b border-slate-200 dark:border-slate-800 flex items-center transition-all ${
           isSidebarOpen ? 'p-4 sm:p-5 landscape:py-3 justify-between' : 'p-3 flex-col justify-center gap-2'
         }`}>
-          <div className={`flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'}`}>
+          <div className={`flex items-center min-w-0 ${isSidebarOpen ? 'gap-3' : 'justify-center'}`}>
             <div
               onClick={() => {
                 if (!isSidebarOpen && onToggleSidebar) onToggleSidebar();
               }}
-              title="AQUAFLOW Tirta Samudra"
+              title={`${liveProfile.effectiveBrandTitle} - ${liveProfile.effectiveName}`}
               className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/25 flex-shrink-0 cursor-pointer"
             >
               <Waves className="w-6 h-6 animate-pulse" />
             </div>
             {isSidebarOpen && (
-              <div className="min-w-0">
-                <h2 className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-1">
-                  AQUA<span className="text-cyan-500">FLOW</span>
-                </h2>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider truncate">
-                  Tirta Samudra Academy
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white truncate">
+                    {liveProfile.effectiveBrandTitle}
+                  </h2>
+                  {currentRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickNameModal(true)}
+                      title="Ganti Nama Akademi & KTA di Seluruh Tampilan"
+                      className="p-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 transition-colors cursor-pointer shrink-0"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <p
+                  onClick={() => {
+                    if (currentRole === 'admin') setShowQuickNameModal(true);
+                  }}
+                  title={currentRole === 'admin' ? 'Klik untuk mengubah nama akademi & KTA' : liveProfile.effectiveName}
+                  className={`text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider truncate ${
+                    currentRole === 'admin' ? 'hover:text-cyan-500 cursor-pointer' : ''
+                  }`}
+                >
+                  {liveProfile.effectiveName}
                 </p>
               </div>
             )}
@@ -704,6 +759,126 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </aside>
+
+      {/* Quick Modal: Ganti Nama Akademi & KTA di Seluruh Tampilan */}
+      {showQuickNameModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Pengaturan Nama Akademi &amp; KTA
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Otomatis memperbarui seluruh halaman, sidebar, dan kartu KTA
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickNameModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickName} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Akademi / Klub Renang (Seluruh Tampilan &amp; Sidebar) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (editKtaTitle === editName || !editKtaTitle.trim()) {
+                      setEditKtaTitle(val);
+                    }
+                    setEditName(val);
+                  }}
+                  placeholder="Contoh: Tirta Samudra Academy"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Nama Klub pada Kartu KTA (Siswa, Pelatih &amp; Admin) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEditKtaTitle(editName)}
+                    className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    Samakan dengan Nama Akademi
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={editKtaTitle}
+                  onChange={(e) => setEditKtaTitle(e.target.value)}
+                  placeholder="Contoh: Tirta Samudra Swimming Club"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Tampil di seluruh KTA Digital, Cetak KTA A4, serta hasil Unduh Gambar KTA (PNG HD).
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Judul Brand / Header Pass (Pojok Kiri Atas &amp; KTA)
+                </label>
+                <input
+                  type="text"
+                  value={editBrandTitle}
+                  onChange={(e) => setEditBrandTitle(e.target.value)}
+                  placeholder="Contoh: AQUAFLOW"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold uppercase focus:ring-2 focus:ring-cyan-500 outline-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-900 text-white border border-cyan-500/30 space-y-1">
+                <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider block">
+                  Pratinjau Header KTA &amp; Sidebar:
+                </span>
+                <p className="font-extrabold text-xs text-sky-300 uppercase">
+                  {(editBrandTitle || 'AQUAFLOW').toUpperCase()} PASS
+                </p>
+                <p className="text-[11px] text-white/80 font-medium">
+                  {editKtaTitle || editName || 'Tirta Samudra Academy'}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickNameModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-cyan-600/20 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan ke Seluruh Tampilan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -258,6 +258,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showAddAttendanceModal, setShowAddAttendanceModal] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentRecord | null>(null);
   const [viewingAdminProof, setViewingAdminProof] = useState<PaymentRecord | null>(null);
+
+  // Quick Edit Academy & KTA Name Modal state
+  const [showQuickAcademyNameModal, setShowQuickAcademyNameModal] = useState(false);
+  const [quickAcademyName, setQuickAcademyName] = useState(academyProfile.name || 'Tirta Samudra Academy');
+  const [quickKtaTitle, setQuickKtaTitle] = useState(academyProfile.ktaTitle || academyProfile.name || 'Tirta Samudra Academy');
+  const [quickBrandTitle, setQuickBrandTitle] = useState(academyProfile.brandTitle || 'AQUAFLOW');
+
+  const handleOpenQuickAcademyNameModal = () => {
+    setQuickAcademyName(academyProfile.name || 'Tirta Samudra Academy');
+    setQuickKtaTitle(academyProfile.ktaTitle || academyProfile.name || 'Tirta Samudra Academy');
+    setQuickBrandTitle(academyProfile.brandTitle || 'AQUAFLOW');
+    setShowQuickAcademyNameModal(true);
+  };
+
+  const handleSaveQuickAcademyName = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = quickAcademyName.trim() || 'Tirta Samudra Academy';
+    const cleanKta = quickKtaTitle.trim() || cleanName;
+    const cleanBrand = quickBrandTitle.trim() || 'AQUAFLOW';
+    const updatedProfile: AcademyProfile = {
+      ...academyProfile,
+      name: cleanName,
+      ktaTitle: cleanKta,
+      brandTitle: cleanBrand,
+    };
+    onUpdateAcademyProfile(updatedProfile);
+    try {
+      localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(updatedProfile));
+      window.dispatchEvent(new Event('aqua:profile-updated'));
+    } catch (err) {}
+    setShowQuickAcademyNameModal(false);
+    showToast(`Nama Akademi & KTA berhasil diubah menjadi "${cleanName}" di seluruh tampilan!`);
+  };
   const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(null);
 
   // Bank Account Management State (Pengaturan Nomor Rekening di Admin)
@@ -1370,7 +1403,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-semibold mb-3">
-              <Waves className="w-3.5 h-3.5" /> Tirta Samudra Swimming Academy Management
+              <Waves className="w-3.5 h-3.5" /> {academyProfile.name || 'Tirta Samudra Academy'} Management
+              <button
+                type="button"
+                onClick={handleOpenQuickAcademyNameModal}
+                className="ml-1 px-2 py-0.5 rounded-full bg-cyan-400/20 hover:bg-cyan-400/40 text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                title="Ganti Nama Akademi & Nama pada KTA"
+              >
+                <Edit className="w-3 h-3" /> Ubah Nama
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Dashboard Administrator</h1>
             <p className="text-sm text-cyan-100/70 mt-1 max-w-xl">
@@ -1379,6 +1420,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleOpenQuickAcademyNameModal}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
+            >
+              <Building2 className="w-4 h-4 text-cyan-300" />
+              Ganti Nama Akademi &amp; KTA
+            </button>
             <button
               onClick={onOpenScanner}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
@@ -4532,6 +4581,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onUpdateAvatar={onUpdateAvatar}
           onUpdateUser={onUpdateUser}
           onViewBarcode={onViewBarcode}
+          academyProfile={academyProfile}
         />
       )}
 
@@ -4560,6 +4610,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 8: CETAK KARTU SWIM PASS BARCODE PER KELAS           */}
       {/* ======================================================== */}
       {activeTab === 'cards' && (() => {
+        const effectiveKtaTitle = academyProfile.ktaTitle || academyProfile.name || 'Tirta Samudra Academy';
+        const effectiveBrandTitle = academyProfile.brandTitle || 'AQUAFLOW';
+
         // Staff members (Admin & Coaches) with Barcodes
         const staffMembers: CardExportData[] = [
           ...appUsers
@@ -4577,6 +4630,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               phone: u.phone || '0812-3456-7890',
               email: u.email || 'admin@tirtasamudra.com',
               joinedDate: '2023-01-01',
+              academyName: effectiveKtaTitle,
+              brandTitle: effectiveBrandTitle,
             })),
           ...coaches.map((c, idx) => ({
             id: c.id,
@@ -4593,6 +4648,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             joinedDate: '2023-03-01',
             certifications: c.certifications,
             experienceYears: c.experienceYears,
+            academyName: effectiveKtaTitle,
+            brandTitle: effectiveBrandTitle,
           })),
         ];
 
@@ -4657,7 +4714,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenQuickAcademyNameModal}
+                  className="px-3.5 py-2 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Ganti Nama Akademi di KTA ({effectiveKtaTitle})</span>
+                </button>
                 <span className="px-3.5 py-2 rounded-2xl bg-white/10 text-white font-mono font-bold text-xs border border-white/10">
                   {displayedCount} / {totalCategoryCount} {isStaffTab ? 'Staf & Pelatih' : 'Murid Terdaftar'}
                 </span>
@@ -4778,7 +4843,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <Waves className="w-5 h-5 text-emerald-400" />
                             )}
                             <span className="font-extrabold text-xs tracking-tight text-white line-clamp-1">
-                              {academyProfile.name}
+                              {effectiveKtaTitle}
                             </span>
                           </div>
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
@@ -4900,7 +4965,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <Waves className="w-5 h-5 text-cyan-400" />
                               )}
                               <span className="font-extrabold text-xs tracking-tight text-white line-clamp-1">
-                                {academyProfile.name}
+                                {effectiveKtaTitle}
                               </span>
                             </div>
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${roleMeta.badgeBg}`}>
@@ -5091,7 +5156,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                           <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
-                            {academyProfile.name}
+                            {academyProfile.ktaTitle || academyProfile.name}
                           </span>
                           <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-600">
                             {st.roleBadge || 'STAFF'}
@@ -5135,7 +5200,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                           <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
-                            {academyProfile.name}
+                            {academyProfile.ktaTitle || academyProfile.name}
                           </span>
                           <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-600">
                             {ROLE_LABELS[st.roleClass]?.textBadge}
@@ -7473,7 +7538,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl text-slate-900 border border-slate-200">
             <div className="text-center border-b pb-4 mb-4">
               <span className="text-[10px] font-bold tracking-widest text-cyan-600 uppercase">
-                Tirta Samudra Swimming Academy
+                {academyProfile.name || 'Tirta Samudra Academy'}
               </span>
               <h3 className="text-lg font-black text-slate-900">KWITANSI RESMI PEMBAYARAN</h3>
               <p className="font-mono text-xs text-slate-500">{selectedReceipt.invoiceNumber}</p>
@@ -8274,6 +8339,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{editingBank ? 'Simpan Perubahan' : 'Simpan Rekening'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: PENGATURAN CEPAT NAMA AKADEMI & KTA               */}
+      {/* ======================================================== */}
+      {showQuickAcademyNameModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    Pengaturan Nama Akademi &amp; KTA
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Ubah nama klub di seluruh tampilan, Sidebar, Kwitansi &amp; Kartu KTA Barcode
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickAcademyNameModal(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickAcademyName} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Nama Akademi / Klub Renang Utama
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={quickAcademyName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!quickKtaTitle || quickKtaTitle === quickAcademyName) {
+                      setQuickKtaTitle(val);
+                    }
+                    setQuickAcademyName(val);
+                  }}
+                  placeholder="Contoh: Tirta Samudra Academy"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Tampil di Sidebar, Navbar, Dashboard Admin/Pelatih/Siswa, Kwitansi, Login &amp; Halaman Publik.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Nama Klub pada Kartu KTA / Barcode Pass
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setQuickKtaTitle(quickAcademyName)}
+                    className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    Samakan dengan Nama Utama
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={quickKtaTitle}
+                  onChange={(e) => setQuickKtaTitle(e.target.value)}
+                  placeholder="Contoh: Tirta Samudra Swimming Club"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Tampil pada seluruh KTA Siswa, Pelatih, Admin, Cetak Massal A4, serta hasil Unduh PNG KTA.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Judul Brand / Header Pass (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={quickBrandTitle}
+                  onChange={(e) => setQuickBrandTitle(e.target.value)}
+                  placeholder="Contoh: AQUAFLOW"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Tampil di atas nama akademi pada Sidebar &amp; judul KTA ({(quickBrandTitle || 'AQUAFLOW').toUpperCase()} PASS).
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAcademyNameModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-cyan-600/20 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Simpan ke Seluruh Tampilan &amp; KTA
                 </button>
               </div>
             </form>

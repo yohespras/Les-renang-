@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Coach, AuthUser, UserRole } from '../../types';
-import { ROLE_LABELS } from '../../data/mockData';
+import { ROLE_LABELS, getLiveAcademyProfile } from '../../data/mockData';
 import { compressAndResizeImage } from '../../services/imageUtils';
 import {
   exportCardToImageDataUrl,
@@ -50,6 +50,7 @@ export const CoachPersonalProfile: React.FC<CoachPersonalProfileProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const liveProfile = getLiveAcademyProfile();
 
   // Form states initialized with currentCoach data
   const [name, setName] = useState(currentCoach.name);
@@ -167,6 +168,8 @@ export const CoachPersonalProfile: React.FC<CoachPersonalProfileProps> = ({
     joinedDate: '2023-03-01',
     certifications: currentCoach.certifications,
     experienceYears: experienceYears,
+    academyName: liveProfile.effectiveKtaName,
+    brandTitle: liveProfile.effectiveBrandTitle,
   };
 
   const handleOpenCoachBarcode = () => {
@@ -463,13 +466,15 @@ export const CoachPersonalProfile: React.FC<CoachPersonalProfileProps> = ({
             {/* Visual Coach Card */}
             <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white border border-emerald-500/30 p-4 shadow-xl space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
-                    TS
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                    {liveProfile.initials}
                   </div>
-                  <span className="font-extrabold text-[11px] tracking-tight">Tirta Samudra</span>
+                  <span className="font-extrabold text-[11px] tracking-tight truncate">
+                    {liveProfile.effectiveKtaName}
+                  </span>
                 </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
                   COACH PASS
                 </span>
               </div>

@@ -169,6 +169,9 @@ export function useFirestoreSync({
     const unsubProfile = subscribeAcademyProfile((remoteProfile) => {
       setAcademyProfile(remoteProfile);
       localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(remoteProfile));
+      try {
+        window.dispatchEvent(new Event('aqua:profile-updated'));
+      } catch (e) {}
       setIsCloudSynced(true);
       setSyncCount((prev) => prev + 1);
     });

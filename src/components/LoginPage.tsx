@@ -544,7 +544,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <ShieldCheck className="w-5 h-5 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
               <div className="text-xs space-y-1">
                 <p className="font-bold text-slate-800 dark:text-slate-200">
-                  Portal Masuk Resmi Tirta Samudra
+                  Portal Masuk Resmi {academyProfile?.name || 'Tirta Samudra Academy'}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                   Silakan masuk menggunakan kredensial akun asli Anda (Username &amp; Kata Sandi), atau scan kartu barcode pass resmi di kamera / pemindai kolam.

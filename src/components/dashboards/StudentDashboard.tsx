@@ -97,7 +97,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const roleMeta = ROLE_LABELS[student.roleClass] || {
     title: 'Kelas Siswa',
-    subtitle: 'Program Renang Tirta Samudra',
+    subtitle: `Program Renang ${academyProfile?.name || 'Tirta Samudra Academy'}`,
     badgeBg: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30',
     textBadge: 'Siswa',
   };
@@ -725,7 +725,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         {classSchedule?.className || roleMeta.title}
                       </p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Jalur: {classSchedule?.lane || 'Kolam Renang Tirta Samudra'}
+                        Jalur: {classSchedule?.lane || `Kolam Renang ${academyProfile?.name || 'Tirta Samudra Academy'}`}
                       </p>
                     </div>
                     <div className="text-left sm:text-right">
@@ -799,7 +799,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   Tunjukkan barcode ini ke pelatih di tepi kolam
                 </p>
                 <div className="w-full flex justify-center">
-                  <BarcodeCard student={student} standalone={true} />
+                  <BarcodeCard student={student} standalone={true} academyProfile={academyProfile} />
                 </div>
               </div>
             </div>
@@ -1287,7 +1287,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
 
             <div className="max-w-md w-full">
-              <BarcodeCard student={student} standalone={true} />
+              <BarcodeCard student={student} standalone={true} academyProfile={academyProfile} />
             </div>
           </div>
         </div>

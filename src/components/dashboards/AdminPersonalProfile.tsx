@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { AuthUser, UserRole } from '../../types';
+import { AuthUser, UserRole, AcademyProfile } from '../../types';
+import { getLiveAcademyProfile } from '../../data/mockData';
 import { compressAndResizeImage } from '../../services/imageUtils';
 import {
   exportCardToImageDataUrl,
@@ -32,6 +33,7 @@ import {
 
 interface AdminPersonalProfileProps {
   currentUser: AuthUser | null;
+  academyProfile?: AcademyProfile;
   onUpdateAvatar?: (newAvatarUrl: string) => void;
   onUpdateUser?: (updatedUser: AuthUser) => void;
   onViewBarcode?: (cardOrUser: any) => void;
@@ -39,6 +41,7 @@ interface AdminPersonalProfileProps {
 
 export const AdminPersonalProfile: React.FC<AdminPersonalProfileProps> = ({
   currentUser,
+  academyProfile,
   onUpdateAvatar,
   onUpdateUser,
   onViewBarcode,
@@ -46,6 +49,7 @@ export const AdminPersonalProfile: React.FC<AdminPersonalProfileProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const liveProfile = getLiveAcademyProfile(academyProfile);
 
   // Form states initialized with currentUser data
   const [name, setName] = useState(currentUser?.name || 'Administrator');
@@ -152,6 +156,8 @@ export const AdminPersonalProfile: React.FC<AdminPersonalProfileProps> = ({
     email: email,
     emergencyContact: phone,
     joinedDate: '2023-01-01',
+    academyName: liveProfile.effectiveKtaName,
+    brandTitle: liveProfile.effectiveBrandTitle,
   };
 
   const handleOpenAdminBarcode = () => {
@@ -216,7 +222,7 @@ export const AdminPersonalProfile: React.FC<AdminPersonalProfileProps> = ({
               </div>
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{name}</h1>
               <p className="text-xs sm:text-sm text-cyan-200/80 mt-1">
-                Akses Penuh Manajemen Sistem &bull; Klub Renang Tirta Samudra
+                Akses Penuh Manajemen Sistem &bull; {liveProfile.effectiveName}
               </p>
 
               <div className="flex items-center gap-2 mt-3">
@@ -453,13 +459,15 @@ export const AdminPersonalProfile: React.FC<AdminPersonalProfileProps> = ({
             {/* Visual Admin Card */}
             <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white border border-indigo-500/30 p-4 shadow-xl space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">
-                    TS
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs shrink-0">
+                    {liveProfile.initials}
                   </div>
-                  <span className="font-extrabold text-[11px] tracking-tight">Tirta Samudra</span>
+                  <span className="font-extrabold text-[11px] tracking-tight truncate">
+                    {liveProfile.effectiveKtaName}
+                  </span>
                 </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
                   ADMIN PASS
                 </span>
               </div>
