@@ -107,6 +107,8 @@ export function useFirestoreSync({
   academyProfileRef.current = academyProfile;
   const bankAccountsRef = useRef(bankAccounts);
   bankAccountsRef.current = bankAccounts;
+  const registrationsRef = useRef(registrations);
+  registrationsRef.current = registrations;
 
   useEffect(() => {
     if (!initialMigrationDone.current) {
@@ -118,7 +120,8 @@ export function useFirestoreSync({
         attendancesRef.current,
         paymentsRef.current,
         academyProfileRef.current,
-        bankAccountsRef.current
+        bankAccountsRef.current,
+        registrationsRef.current
       ).catch((e) => console.warn('Initial cloud migration notice:', e));
     }
 
@@ -153,8 +156,12 @@ export function useFirestoreSync({
     });
 
     const unsubPayments = subscribePayments((remotePayments) => {
-      setPayments(remotePayments);
-      localStorage.setItem('AQUA_PAYMENTS', JSON.stringify(remotePayments));
+      // Filter out orphan/deleted invalid payments like pay-trf-657834
+      const validPayments = (remotePayments || []).filter(
+        (p) => p.id !== 'pay-trf-657834'
+      );
+      setPayments(validPayments);
+      localStorage.setItem('AQUA_PAYMENTS', JSON.stringify(validPayments));
       setIsCloudSynced(true);
       setSyncCount((prev) => prev + 1);
     });

@@ -202,6 +202,7 @@ export interface StudentRegistration {
   preferredSchedule: string;
   registrationDate: string;
   status: 'pending' | 'approved' | 'rejected';
+  studentId?: string;
   notes?: string;
 }
 

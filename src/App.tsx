@@ -1271,12 +1271,81 @@ export default function App() {
     syncDeletePricingPackage(pkgId);
   };
 
+  // Auto-healing: Jika pendaftar sudah ada di daftar siswa aktif (misal sudah pernah di-ACC sebelumnya),
+  // otomatis pastikan status pendaftarannya adalah 'approved' agar tidak terus muncul peringatan 'Menunggu Persetujuan'
+  useEffect(() => {
+    if (registrations.length === 0 || students.length === 0) return;
+    let hasChanges = false;
+    const healed = registrations.map((r) => {
+      if (r.status === 'pending') {
+        const matched = students.find(
+          (s) =>
+            s.id === r.studentId ||
+            s.name.trim().toLowerCase() === r.fullName.trim().toLowerCase() ||
+            (r.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === r.phone.replace(/[^0-9]/g, ''))
+        );
+        if (matched) {
+          hasChanges = true;
+          const updated = { ...r, status: 'approved' as const, studentId: matched.id };
+          syncSaveRegistration(updated);
+          return updated;
+        }
+      }
+      return r;
+    });
+    if (hasChanges) {
+      setRegistrations(healed);
+      try {
+        localStorage.setItem('AQUA_REGISTRATIONS', JSON.stringify(healed));
+      } catch (e) {}
+    }
+  }, [students, registrations]);
+
   // Handler to approve online registration and automatically generate a Student record & login account
   const handleApproveAndCreateStudent = (
     reg: StudentRegistration,
     targetClass: UserRole,
     initialQuota: number
   ) => {
+    // 1. Cek apakah calon siswa ini sudah pernah didaftarkan / ada di daftar murid aktif
+    const existingStudent = students.find(
+      (s) =>
+        s.id === reg.studentId ||
+        s.name.trim().toLowerCase() === reg.fullName.trim().toLowerCase() ||
+        (reg.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === reg.phone.replace(/[^0-9]/g, ''))
+    );
+
+    if (existingStudent) {
+      // Siswa sudah ada, tandai semua pendaftaran terkait sebagai 'approved'
+      const updatedRegs = registrations.map((r) =>
+        r.id === reg.id ||
+        r.fullName.trim().toLowerCase() === reg.fullName.trim().toLowerCase() ||
+        (reg.phone && r.phone && r.phone.replace(/[^0-9]/g, '') === reg.phone.replace(/[^0-9]/g, ''))
+          ? { ...r, status: 'approved' as const, studentId: existingStudent.id }
+          : r
+      );
+      setRegistrations(updatedRegs);
+      try {
+        localStorage.setItem('AQUA_REGISTRATIONS', JSON.stringify(updatedRegs));
+      } catch (e) {}
+
+      const targetApprovedReg = updatedRegs.find((r) => r.id === reg.id) || {
+        ...reg,
+        status: 'approved' as const,
+        studentId: existingStudent.id,
+      };
+      syncSaveRegistration(targetApprovedReg);
+
+      alert(
+        `Calon siswa "${reg.fullName}" sudah terdaftar aktif sebagai murid akademi:\n\n` +
+        `- NIS / Barcode: ${existingStudent.barcode}\n` +
+        `- Kelas: ${existingStudent.roleClass.toUpperCase()}\n` +
+        `- Status Kuota: ${existingStudent.remainingQuota}/${existingStudent.totalQuota} Pertemuan\n\n` +
+        `Status formulir pendaftaran telah diperbarui menjadi "Disetujui" (ACC).`
+      );
+      return;
+    }
+
     const codeMap: Record<string, string> = {
       dasar: 'DSR',
       pemula: 'PML',
@@ -1342,25 +1411,29 @@ export default function App() {
     localStorage.setItem('AQUA_APP_USERS', JSON.stringify(updatedUsers));
     syncSaveUser(newUser);
 
-    // Mark registration as approved
+    // Mark all matching registrations as approved
     const updatedRegs = registrations.map((r) =>
-      r.id === reg.id ? { ...r, status: 'approved' as const } : r
+      r.id === reg.id || r.fullName.trim().toLowerCase() === reg.fullName.trim().toLowerCase()
+        ? { ...r, status: 'approved' as const, studentId: newStudentId }
+        : r
     );
     setRegistrations(updatedRegs);
     localStorage.setItem('AQUA_REGISTRATIONS', JSON.stringify(updatedRegs));
-    const targetApprovedReg = updatedRegs.find((r) => r.id === reg.id);
-    if (targetApprovedReg) {
-      syncSaveRegistration(targetApprovedReg);
-    }
+    const targetApprovedReg = updatedRegs.find((r) => r.id === reg.id) || {
+      ...reg,
+      status: 'approved' as const,
+      studentId: newStudentId,
+    };
+    syncSaveRegistration(targetApprovedReg);
 
     alert(
-      `Pendaftaran ${reg.fullName} berhasil disetujui!\n\n` +
+      `Pendaftaran ${reg.fullName} berhasil disetujui (ACC)!\n\n` +
       `- NIS / Barcode: ${newBarcode}\n` +
       `- Username Login: ${cleanUsername}\n` +
       `- Password Default: siswa123\n` +
       `- Kelas: ${targetClass.toUpperCase()}\n` +
       `- Kuota Sesi: ${initialQuota} Pertemuan\n\n` +
-      `Siswa sekarang dapat login menggunakan username atau scan barcode!`
+      `Siswa sekarang telah aktif di daftar murid dan dapat login menggunakan username atau scan barcode!`
     );
   };
 
@@ -1571,7 +1644,17 @@ export default function App() {
         currentStudent={currentStudent}
         currentUser={currentUser}
         onLogout={handleLogout}
-        pendingRegistrationsCount={registrations.filter((r) => r.status === 'pending').length}
+        pendingRegistrationsCount={
+          registrations.filter(
+            (r) =>
+              r.status === 'pending' &&
+              !students.some(
+                (s) =>
+                  s.name.trim().toLowerCase() === r.fullName.trim().toLowerCase() ||
+                  (r.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === r.phone.replace(/[^0-9]/g, ''))
+              )
+          ).length
+        }
       />
 
       {/* Main App Content Area */}

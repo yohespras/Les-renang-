@@ -47,6 +47,7 @@ interface AdminProfileSettingsProps {
   academyProfile: AcademyProfile;
   onUpdateAcademyProfile: (profile: AcademyProfile) => void;
   registrations: StudentRegistration[];
+  students?: Student[];
   onUpdateRegistration: (registration: StudentRegistration) => void;
   onDeleteRegistration: (regId: string) => void;
   onApproveAndCreateStudent: (
@@ -66,6 +67,7 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
   academyProfile,
   onUpdateAcademyProfile,
   registrations = [],
+  students = [],
   onUpdateRegistration,
   onDeleteRegistration,
   onApproveAndCreateStudent,
@@ -316,9 +318,16 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
     setFacilities(facilities.filter((_, i) => i !== index));
   };
 
-  // Filter registrations
+  // Filter registrations (otomatis sinkron dengan siswa yang sudah di-ACC / terdaftar aktif)
   const filteredRegistrations = registrations.filter((reg) => {
-    const matchStatus = regFilterStatus === 'all' || reg.status === regFilterStatus;
+    const isEnrolled = students.some(
+      (s) =>
+        s.id === reg.studentId ||
+        s.name.trim().toLowerCase() === reg.fullName.trim().toLowerCase() ||
+        (reg.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === reg.phone.replace(/[^0-9]/g, ''))
+    );
+    const effectiveStatus = isEnrolled ? 'approved' : reg.status;
+    const matchStatus = regFilterStatus === 'all' || effectiveStatus === regFilterStatus;
     const matchQuery =
       reg.fullName.toLowerCase().includes(regSearchQuery.toLowerCase()) ||
       reg.id.toLowerCase().includes(regSearchQuery.toLowerCase()) ||
@@ -327,7 +336,15 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
     return matchStatus && matchQuery;
   });
 
-  const pendingCount = registrations.filter((r) => r.status === 'pending').length;
+  const pendingCount = registrations.filter((r) => {
+    const isEnrolled = students.some(
+      (s) =>
+        s.id === r.studentId ||
+        s.name.trim().toLowerCase() === r.fullName.trim().toLowerCase() ||
+        (r.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === r.phone.replace(/[^0-9]/g, ''))
+    );
+    return r.status === 'pending' && !isEnrolled;
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -933,6 +950,14 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
                 const pkg = pricingPackages.find((p) => p.roleClass === reg.roleClass);
                 const initialQuota = pkg?.sessionsCount || 12;
 
+                const matchedStudent = students.find(
+                  (s) =>
+                    s.id === reg.studentId ||
+                    s.name.trim().toLowerCase() === reg.fullName.trim().toLowerCase() ||
+                    (reg.phone && s.phone && s.phone.replace(/[^0-9]/g, '') === reg.phone.replace(/[^0-9]/g, ''))
+                );
+                const isAlreadyEnrolled = !!matchedStudent || reg.status === 'approved';
+
                 return (
                   <div
                     key={reg.id}
@@ -954,18 +979,18 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
                         </span>
                         <span
                           className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                            reg.status === 'pending'
-                              ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
-                              : reg.status === 'approved'
+                            isAlreadyEnrolled
                               ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                              : reg.status === 'rejected'
+                              ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                              : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
                           }`}
                         >
-                          {reg.status === 'pending'
-                            ? 'Menunggu Persetujuan'
-                            : reg.status === 'approved'
-                            ? 'Sudah Disetujui (Siswa Aktif)'
-                            : 'Ditolak'}
+                          {isAlreadyEnrolled
+                            ? `Sudah Disetujui (Siswa Aktif: ${matchedStudent?.name || reg.fullName})`
+                            : reg.status === 'rejected'
+                            ? 'Ditolak'
+                            : 'Menunggu Persetujuan'}
                         </span>
                       </div>
 
@@ -1032,8 +1057,13 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
                         <span>Chat WA</span>
                       </a>
 
-                      {/* Approve Button */}
-                      {reg.status !== 'approved' && (
+                      {/* Approve Button / Enrolled Indicator */}
+                      {isAlreadyEnrolled ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Sudah Aktif ({matchedStudent?.barcode || 'Terdaftar'})</span>
+                        </span>
+                      ) : (
                         <button
                           onClick={() => onApproveAndCreateStudent(reg, reg.roleClass, initialQuota)}
                           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/20 transition-all cursor-pointer"

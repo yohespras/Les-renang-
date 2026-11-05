@@ -96,7 +96,11 @@ export function subscribeFirestoreCollection<T extends { id: string }>(
     },
     (err) => {
       console.warn(`[Firestore] Subscription note for ${collectionName}:`, err.message);
-      handleFirestoreError(err, OperationType.GET, collectionName);
+      try {
+        handleFirestoreError(err, OperationType.GET, collectionName);
+      } catch (e) {
+        console.warn(`[Firestore] Handled subscription note for ${collectionName}`);
+      }
     }
   );
 }
@@ -333,7 +337,8 @@ export async function syncInitialLocalDataToFirestore(
   localAttendances: AttendanceRecord[],
   localPayments: PaymentRecord[],
   localProfile: AcademyProfile,
-  localBanks: BankAccountInfo[]
+  localBanks: BankAccountInfo[],
+  localRegistrations?: StudentRegistration[]
 ): Promise<void> {
   try {
     // 1. Users
@@ -377,14 +382,8 @@ export async function syncInitialLocalDataToFirestore(
     }
 
     // 5. Payments
-    const paymentsSnap = await getDocs(collection(db, 'payments'));
-    if (paymentsSnap.empty && localPayments.length > 0) {
-      const batch = writeBatch(db);
-      for (const p of localPayments) {
-        batch.set(doc(db, 'payments', p.id), cleanDataForFirestore(p), { merge: true });
-      }
-      await batch.commit();
-    }
+    // DO NOT resurrect deleted payments when payments collection is empty.
+    // Payments are transactional; once deleted by admin, they must not be repopulated from local cache.
 
     // 6. Bank Accounts
     const banksSnap = await getDocs(collection(db, 'bankAccounts'));
@@ -394,6 +393,18 @@ export async function syncInitialLocalDataToFirestore(
         batch.set(doc(db, 'bankAccounts', b.id), cleanDataForFirestore(b), { merge: true });
       }
       await batch.commit();
+    }
+
+    // 7. Registrations
+    if (localRegistrations && localRegistrations.length > 0) {
+      const regsSnap = await getDocs(collection(db, 'registrations'));
+      if (regsSnap.empty) {
+        const batch = writeBatch(db);
+        for (const r of localRegistrations) {
+          batch.set(doc(db, 'registrations', r.id), cleanDataForFirestore(r), { merge: true });
+        }
+        await batch.commit();
+      }
     }
   } catch (err) {
     console.warn('[Firestore] Sync local to cloud initial check notice:', err);

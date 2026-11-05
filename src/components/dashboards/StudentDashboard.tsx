@@ -218,9 +218,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const isQuotaDepleted = remainingQuota <= 0;
   const quotaPercent = Math.min(100, Math.round((usedSessions / totalQuota) * 100));
 
-  // Check if there is an unverified pending payment with proof uploaded
-  const pendingProofPayment = payments.find(
-    (p) => p.status === 'menunggu' && !!p.proofUrl
+  // Filter pembayaran khusus murid yang sedang login ini
+  const studentPayments = payments.filter(
+    (p) =>
+      p.studentId === student.id ||
+      (p.studentName && p.studentName.trim().toLowerCase() === student.name.trim().toLowerCase())
+  );
+
+  // Check if there is an unverified pending payment with proof uploaded specifically for this student
+  const pendingProofPayment = studentPayments.find(
+    (p) => p.status === 'menunggu' && !!p.proofUrl && p.proofUrl.trim() !== ''
   );
 
   const handleCopyAccount = (accNumber: string, bankCode: string) => {
@@ -292,8 +299,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     (a, b) => new Date(`${b.dateStr}T${b.timeStr}`).getTime() - new Date(`${a.dateStr}T${a.timeStr}`).getTime()
   );
 
-  // Recent payments
-  const recentPayments = [...payments].sort(
+  // Recent payments khusus siswa ini
+  const recentPayments = [...studentPayments].sort(
     (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
   );
 
@@ -1121,7 +1128,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
             )}
 
-            {payments.length === 0 ? (
+            {studentPayments.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm font-bold">Belum ada riwayat tagihan atau pembayaran.</p>
