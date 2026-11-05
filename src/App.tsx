@@ -417,6 +417,27 @@ export default function App() {
       setStudents(updatedStudents);
       localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
       syncSaveStudent(updatedStudent);
+    } else if (record.status === 'hadir' || !record.status) {
+      // Input manual tanpa updatedStudent: kurangi kuota HANYA untuk siswa terkait
+      const target =
+        students.find((s) => s.id === record.studentId) ||
+        (record.studentBarcode
+          ? students.find(
+              (s) =>
+                s.barcode === record.studentBarcode &&
+                s.name.trim().toLowerCase() === record.studentName.trim().toLowerCase()
+            )
+          : undefined);
+      if (target) {
+        const newRemaining = Math.max(0, (target.remainingQuota ?? target.totalQuota) - 1);
+        if (newRemaining !== target.remainingQuota) {
+          const stUpdated = { ...target, remainingQuota: newRemaining };
+          const updatedStudents = students.map((s) => (s.id === target.id ? stUpdated : s));
+          setStudents(updatedStudents);
+          localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+          syncSaveStudent(stUpdated);
+        }
+      }
     }
   };
 
@@ -1355,9 +1376,19 @@ export default function App() {
       privat_12: 'PV12',
     };
     const code = codeMap[targetClass] || 'REN';
-    const randNum = 100 + Math.floor(Math.random() * 899);
-    const newBarcode = `AQUA-${code}-${randNum}`;
+    // Cari nomor barcode tertinggi yang sudah ada agar tidak bentrok antar siswa
+    const existingNums = students
+      .map((s) => {
+        const match = s.barcode?.match(new RegExp(`AQUA-${code}-(\\d+)`, 'i'));
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n) && n > 0);
+    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 101;
+    const newBarcode = `AQUA-${code}-${nextNum}`;
     const newStudentId = `std-${code.toLowerCase()}-${Date.now().toString().slice(-4)}`;
+
+    const effectiveQuota =
+      targetClass === 'dasar' && (!initialQuota || initialQuota === 12) ? 8 : initialQuota || 8;
 
     const newStudent: Student = {
       id: newStudentId,
@@ -1372,8 +1403,8 @@ export default function App() {
       emergencyContact: reg.phone,
       joinedDate: new Date().toISOString().split('T')[0],
       status: 'active',
-      remainingQuota: initialQuota,
-      totalQuota: initialQuota,
+      remainingQuota: effectiveQuota,
+      totalQuota: effectiveQuota,
       assignedCoachId: coaches[0]?.id || 'c1',
       avatarUrl:
         reg.gender === 'Perempuan'

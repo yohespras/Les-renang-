@@ -323,7 +323,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     phone: '',
     parentName: '',
     emergencyContact: '',
-    totalQuota: 12,
+    totalQuota: 8,
     avatarUrl: '',
     notes: '',
     username: '',
@@ -333,7 +333,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // New Payment Form state
   const [newPaymentData, setNewPaymentData] = useState({
     studentId: students[0]?.id || '',
-    packageName: 'Iuran Bulanan Kelas Dasar (12 Pertemuan)',
+    packageName: 'Iuran Bulanan Kelas Dasar (8 Pertemuan)',
     amount: 350000,
     paymentMethod: 'Transfer Bank' as 'Transfer Bank' | 'QRIS' | 'Tunai di Kolam' | 'Kartu Debit',
     status: 'lunas' as 'lunas' | 'menunggu' | 'jatuh_tempo',
@@ -677,15 +677,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Helper: Jumlah sesi absen yang sudah dilaksanakan oleh masing-masing peserta
+  // Helper: Jumlah sesi absen yang sudah dilaksanakan oleh masing-masing peserta (isolasikan strictly per siswa!)
   const getStudentExecutedAttendance = (st: Student) => {
-    const logs = attendances.filter(
-      (a) =>
-        (a.studentId === st.id ||
-          (a.studentBarcode && a.studentBarcode.toUpperCase() === st.barcode.toUpperCase()) ||
-          a.studentName.toLowerCase() === st.name.toLowerCase()) &&
-        (a.status === 'hadir' || !a.status)
-    );
+    const logs = attendances.filter((a) => {
+      // Hanya hitung status hadir (atau status kosong bawaan hadir)
+      const isPresent = a.status === 'hadir' || !a.status;
+      if (!isPresent) return false;
+
+      // 1. Prioritas Utama: Cocokkan strictly dengan studentId unik siswa
+      if (a.studentId) {
+        return a.studentId === st.id;
+      }
+
+      // 2. Fallback untuk data log lama tanpa studentId: Wajib cocok barcode DAN nama siswa secara presisi
+      if (a.studentBarcode && st.barcode) {
+        return (
+          a.studentBarcode.trim().toUpperCase() === st.barcode.trim().toUpperCase() &&
+          a.studentName?.trim().toLowerCase() === st.name?.trim().toLowerCase()
+        );
+      }
+
+      return !!a.studentName && a.studentName.trim().toLowerCase() === st.name?.trim().toLowerCase();
+    });
+
     if (typeof st.manualExecutedSessions === 'number') {
       return Math.max(logs.length, st.manualExecutedSessions);
     }
@@ -846,8 +860,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       privat_12: 'PV12',
     };
 
-    const count = students.filter((s) => s.roleClass === newStudentData.roleClass).length + 1;
-    const barcode = `AQUA-${prefixMap[newStudentData.roleClass]}-${100 + count}`;
+    const prefix = prefixMap[newStudentData.roleClass] || 'GEN';
+    // Cari nomor barcode tertinggi yang sudah ada agar tidak bentrok antar siswa
+    const existingNums = students
+      .map((s) => {
+        const match = s.barcode?.match(new RegExp(`AQUA-${prefix}-(\\d+)`, 'i'));
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n) && n > 0);
+    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 101;
+    const barcode = `AQUA-${prefix}-${nextNum}`;
     const id = `std-${Date.now()}`;
 
     const created: Student = {
@@ -866,7 +888,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       remainingQuota: Number(newStudentData.totalQuota),
       totalQuota: Number(newStudentData.totalQuota),
       assignedCoachId: 'c1',
-      avatarUrl: newStudentData.avatarUrl.trim() || `https://images.unsplash.com/photo-${1500000000000 + count * 12345}?w=150&auto=format&fit=crop&q=80`,
+      avatarUrl: newStudentData.avatarUrl.trim() || `https://images.unsplash.com/photo-${1500000000000 + nextNum * 12345}?w=150&auto=format&fit=crop&q=80`,
       notes: newStudentData.notes || 'Siswa baru terdaftar di akademi.',
     };
 
@@ -897,7 +919,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       phone: '',
       parentName: '',
       emergencyContact: '',
-      totalQuota: 12,
+      totalQuota: 8,
       avatarUrl: '',
       notes: '',
       username: '',
@@ -1213,6 +1235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       id: `att-${Date.now()}`,
       studentId: st.id,
       studentName: st.name,
+      studentBarcode: st.barcode,
       roleClass: st.roleClass,
       dateStr: targetDate,
       timeStr,
@@ -5355,7 +5378,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-medium"
                   >
                     <optgroup label="Pendaftaran Murid Baru (Terbuka)">
-                      <option value="dasar">Kelas Dasar (12 Pertemuan)</option>
+                      <option value="dasar">Kelas Dasar (8 Pertemuan)</option>
                       <option value="privat_4">Kelas Privat 4 Sesi (4 Pertemuan)</option>
                       <option value="privat_8">Kelas Privat 8 Sesi (8 Pertemuan)</option>
                       <option value="privat_12">Kelas Privat 12 Sesi (12 Pertemuan)</option>
@@ -5386,6 +5409,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }
                     className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border-2 border-cyan-500/40 rounded-xl dark:border-slate-700 font-black text-cyan-600 dark:text-cyan-400"
                   />
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewStudentData({ ...newStudentData, totalQuota: 8 })}
+                      className={`px-2 py-0.5 text-[10px] rounded-lg font-bold border transition-colors cursor-pointer ${
+                        newStudentData.totalQuota === 8
+                          ? 'bg-cyan-500 text-white border-cyan-500'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      8 Sesi (Dasar)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewStudentData({ ...newStudentData, totalQuota: 12 })}
+                      className={`px-2 py-0.5 text-[10px] rounded-lg font-bold border transition-colors cursor-pointer ${
+                        newStudentData.totalQuota === 12
+                          ? 'bg-cyan-500 text-white border-cyan-500'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      12 Sesi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewStudentData({ ...newStudentData, totalQuota: 4 })}
+                      className={`px-2 py-0.5 text-[10px] rounded-lg font-bold border transition-colors cursor-pointer ${
+                        newStudentData.totalQuota === 4
+                          ? 'bg-cyan-500 text-white border-cyan-500'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      4 Sesi
+                    </button>
+                  </div>
                 </div>
               </div>
 

@@ -948,7 +948,7 @@ export const AdminProfileSettings: React.FC<AdminProfileSettingsProps> = ({
             <div className="space-y-3">
               {filteredRegistrations.map((reg) => {
                 const pkg = pricingPackages.find((p) => p.roleClass === reg.roleClass);
-                const initialQuota = pkg?.sessionsCount || 12;
+                const initialQuota = pkg?.sessionsCount || (reg.roleClass === 'dasar' ? 8 : 12);
 
                 const matchedStudent = students.find(
                   (s) =>

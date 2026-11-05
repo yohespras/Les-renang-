@@ -299,17 +299,17 @@ export const INITIAL_PRICING_PACKAGES: ClassPricingPackage[] = [
   {
     id: 'pkg-dsr-1',
     roleClass: 'dasar',
-    packageName: 'Kelas Dasar Adaptasi Air (Bulanan)',
+    packageName: 'Kelas Dasar Adaptasi Air (8x Pertemuan)',
     billingType: 'bulanan',
     price: 350000,
-    sessionsCount: 12,
-    sessionsPerWeek: 3,
+    sessionsCount: 8,
+    sessionsPerWeek: 2,
     durationMinutes: 60,
-    scheduleDescription: 'Senin, Rabu, Jumat (16:00 - 17:00 WIB)',
+    scheduleDescription: 'Senin & Rabu / Jumat & Sabtu (16:00 - 17:00 WIB)',
     coachRatio: '1 Pelatih : 5 Siswa',
     poolLane: 'Kolam Dangkal - Kedalaman 0.8m',
     features: [
-      '12 Sesi Pertemuan per Bulan',
+      '8 Sesi Pertemuan per Bulan (2x seminggu)',
       'Sistem Pembayaran Bulanan',
       'Fokus Mengatasi Takut Air, Meluncur & Mengapung',
       'Instruktur Khusus Ramah Anak Usia Dini',
@@ -545,11 +545,11 @@ export function getClassDefaultQuota(
     case 'prestasi':
       return 16;
     case 'dasar':
-      return 12;
+      return 8;
     case 'pemula':
       return 12;
     default:
-      return 12;
+      return 8;
   }
 }
 
@@ -560,6 +560,9 @@ export function getEffectiveStudentQuota(
   student: Student,
   pricingPackages?: ClassPricingPackage[]
 ): number {
+  if (student.roleClass === 'dasar' && (!student.totalQuota || student.totalQuota === 12)) {
+    return 8;
+  }
   if (student.roleClass === 'privat_4' && (!student.totalQuota || student.totalQuota === 12)) {
     return 4;
   }
