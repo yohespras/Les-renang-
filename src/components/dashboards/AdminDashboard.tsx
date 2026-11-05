@@ -2057,6 +2057,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Participant Profile Details */}
                       <div className="space-y-2 text-xs py-2 border-t border-slate-100 dark:border-slate-800">
                         <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                          <span className="text-slate-400">Jenis Kelamin:</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {st.gender || 'Laki-laki'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-600 dark:text-slate-300">
                           <span className="text-slate-400">Usia & Tgl Lahir:</span>
                           <span className="font-semibold">
                             {st.age} Th •{' '}
@@ -5278,6 +5284,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">Jenis Kelamin</label>
+                  <select
+                    value={editingStudent.gender || 'Laki-laki'}
+                    onChange={(e) =>
+                      setEditingStudent({
+                        ...editingStudent,
+                        gender: e.target.value as 'Laki-laki' | 'Perempuan',
+                      })
+                    }
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-semibold text-slate-900 dark:text-white"
+                  >
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300">Sisa Kuota Sesi</label>
                   <input
                     type="number"
@@ -5285,6 +5310,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setEditingStudent({ ...editingStudent, remainingQuota: Number(e.target.value) })}
                     className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-bold text-cyan-600"
                   />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">Kelas Renang</label>
+                  <select
+                    value={editingStudent.roleClass}
+                    onChange={(e) =>
+                      setEditingStudent({
+                        ...editingStudent,
+                        roleClass: e.target.value as UserRole,
+                      })
+                    }
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-semibold text-slate-900 dark:text-white"
+                  >
+                    <option value="dasar">Kelas Dasar</option>
+                    <option value="pemula">Kelas Pemula</option>
+                    <option value="prestasi">Kelas Prestasi</option>
+                    <option value="privat_4">Privat 4 Sesi</option>
+                    <option value="privat_8">Privat 8 Sesi</option>
+                    <option value="privat_12">Privat 12 Sesi</option>
+                  </select>
                 </div>
               </div>
 

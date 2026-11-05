@@ -77,6 +77,7 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
         barcode: student.barcode,
         avatarUrl: student.avatarUrl,
         roleClass: student.roleClass,
+        gender: student.gender,
         age: student.age,
         birthDate: student.birthDate,
         remainingQuota: Math.min(
@@ -416,7 +417,7 @@ export const BarcodeCard: React.FC<BarcodeCardProps> = ({
             ) : (
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700 text-slate-300">
-                  Usia {effectiveCard.age ?? 10} Th
+                  {effectiveCard.gender ? `${effectiveCard.gender} • ` : ''}Usia {effectiveCard.age ?? 10} Th
                 </span>
                 <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium">
                   {effectiveCard.remainingQuota ?? 10} / {effectiveCard.totalQuota ?? 12} Sesi

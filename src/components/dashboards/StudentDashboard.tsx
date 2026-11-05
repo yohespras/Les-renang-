@@ -142,16 +142,25 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   // Editable profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [genderInput, setGenderInput] = useState<'Laki-laki' | 'Perempuan'>(student.gender || 'Laki-laki');
   const [phoneInput, setPhoneInput] = useState(student.phone);
   const [parentNameInput, setParentNameInput] = useState(student.parentName);
   const [emergencyInput, setEmergencyInput] = useState(student.emergencyContact);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    setGenderInput(student.gender || 'Laki-laki');
+    setPhoneInput(student.phone);
+    setParentNameInput(student.parentName);
+    setEmergencyInput(student.emergencyContact);
+  }, [student]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     if (onUpdateStudent) {
       onUpdateStudent({
         ...student,
+        gender: genderInput,
         phone: phoneInput,
         parentName: parentNameInput,
         emergencyContact: emergencyInput,
@@ -857,13 +866,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 onClick={() => setIsEditingProfile(!isEditingProfile)}
                 className={`px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:${roleMeta.accentBg} text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer`}
               >
-                {isEditingProfile ? 'Batal Edit' : 'Edit Kontak Profil'}
+                {isEditingProfile ? 'Batal Edit' : 'Edit Profil & Kontak'}
               </button>
             </div>
 
             {/* Profile Edit Form or Display */}
             {isEditingProfile ? (
               <form onSubmit={handleSaveProfile} className="mt-6 space-y-4 max-w-xl">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Jenis Kelamin:
+                  </label>
+                  <select
+                    value={genderInput}
+                    onChange={(e) => setGenderInput(e.target.value as 'Laki-laki' | 'Perempuan')}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
                     Nomor WhatsApp / HP Siswa:

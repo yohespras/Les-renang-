@@ -8,6 +8,7 @@ export interface CardExportData {
   barcode: string;
   avatarUrl: string;
   roleClass: UserRole;
+  gender?: 'Laki-laki' | 'Perempuan';
   age?: number;
   birthDate?: string;
   remainingQuota?: number;
@@ -528,14 +529,16 @@ export const drawCardOnCanvas = (
           ctx.font = 'bold 14px sans-serif';
           ctx.fillText(phoneText, 382, 262);
         } else {
-          // Student Age & Quota Tags
+          // Student Gender, Age & Quota Tags
           const std = student as Student;
-          const ageText = `Usia ${std.age ?? 10} Th`;
-          roundRect(180, 240, 110, 32, 8);
+          const genderPrefix = std.gender ? `${std.gender} • ` : '';
+          const ageText = `${genderPrefix}Usia ${std.age ?? 10} Th`;
+          ctx.font = '500 15px sans-serif';
+          const ageTagWidth = Math.max(110, Math.ceil(ctx.measureText(ageText).width + 24));
+          roundRect(180, 240, ageTagWidth, 32, 8);
           ctx.fillStyle = '#1e293b';
           ctx.fill();
           ctx.fillStyle = '#cbd5e1';
-          ctx.font = '500 16px sans-serif';
           ctx.fillText(ageText, 192, 262);
 
           // Quota Tag
@@ -546,7 +549,8 @@ export const drawCardOnCanvas = (
             ? Math.max(0, Math.min(effTotal, std.remainingQuota))
             : effTotal;
           const quotaText = `${effRemaining} / ${effTotal} Sesi`;
-          roundRect(300, 240, 130, 32, 8);
+          const quotaX = 180 + ageTagWidth + 10;
+          roundRect(quotaX, 240, 130, 32, 8);
           ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
           ctx.fill();
           ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
