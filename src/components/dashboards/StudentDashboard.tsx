@@ -102,7 +102,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     textBadge: 'Siswa',
   };
 
-  const assignedCoach = coaches.find((c) => c.id === student.assignedCoachId);
+  const assignedCoach =
+    coaches.find(
+      (c) =>
+        c.id === student.assignedCoachId ||
+        (c.barcode && c.barcode === student.assignedCoachId) ||
+        c.name.trim().toLowerCase() === (student.assignedCoachId || '').trim().toLowerCase()
+    ) || coaches[0];
   const classSchedule = schedules.find((s) => s.roleClass === student.roleClass) || schedules[0];
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -140,34 +146,57 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     }
   };
 
-  // Editable profile state
+  // Editable profile state (Full Biodata Peserta)
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<'Laki-laki' | 'Perempuan'>(student.gender || 'Laki-laki');
+  const [birthDateInput, setBirthDateInput] = useState(student.birthDate || '');
+  const [ageInput, setAgeInput] = useState<number>(student.age || 10);
   const [phoneInput, setPhoneInput] = useState(student.phone);
   const [parentNameInput, setParentNameInput] = useState(student.parentName);
   const [emergencyInput, setEmergencyInput] = useState(student.emergencyContact);
+  const [notesInput, setNotesInput] = useState(student.notes || '');
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
 
   useEffect(() => {
+    setNameInput(student.name);
     setGenderInput(student.gender || 'Laki-laki');
+    setBirthDateInput(student.birthDate || '');
+    setAgeInput(student.age || 10);
     setPhoneInput(student.phone);
     setParentNameInput(student.parentName);
     setEmergencyInput(student.emergencyContact);
+    setNotesInput(student.notes || '');
   }, [student]);
+
+  const handleBirthDateChange = (newBirthDate: string) => {
+    setBirthDateInput(newBirthDate);
+    if (newBirthDate) {
+      const birthYear = new Date(newBirthDate).getFullYear();
+      const currentYear = new Date().getFullYear();
+      if (!isNaN(birthYear) && birthYear > 1940 && birthYear <= currentYear) {
+        setAgeInput(Math.max(1, currentYear - birthYear));
+      }
+    }
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     if (onUpdateStudent) {
       onUpdateStudent({
         ...student,
+        name: nameInput.trim() || student.name,
         gender: genderInput,
-        phone: phoneInput,
-        parentName: parentNameInput,
-        emergencyContact: emergencyInput,
+        birthDate: birthDateInput || student.birthDate,
+        age: Number(ageInput) || student.age,
+        phone: phoneInput.trim() || student.phone,
+        parentName: parentNameInput.trim() || student.parentName,
+        emergencyContact: emergencyInput.trim() || student.emergencyContact,
+        notes: notesInput.trim() || student.notes,
       });
       setProfileSaveSuccess(true);
       setIsEditingProfile(false);
-      setTimeout(() => setProfileSaveSuccess(false), 3000);
+      setTimeout(() => setProfileSaveSuccess(false), 3500);
     }
   };
 
@@ -398,6 +427,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           {/* Quick tab shortcuts */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                onTabChange('profile');
+                setIsEditingProfile(true);
+              }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'profile'
+                  ? 'bg-white text-slate-900 shadow-lg'
+                  : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span>Edit Biodata</span>
+            </button>
             <button
               onClick={() => onTabChange('card')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
@@ -695,18 +738,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   Pelatih Pembimbing
                 </span>
                 <div className="mt-2 flex items-center gap-2.5">
-                  <img
-                    src={assignedCoach?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                    alt="Coach"
-                    className="w-8 h-8 rounded-full object-cover border"
-                  />
+                  {assignedCoach?.avatarUrl ? (
+                    <img
+                      src={assignedCoach.avatarUrl}
+                      alt={assignedCoach.name}
+                      className="w-8 h-8 rounded-full object-cover border border-cyan-400"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                  )}
                   <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {assignedCoach?.name || 'Coach Hendra Gunawan'}
+                    {assignedCoach?.name || 'Belum Ada Pelatih Ditentukan'}
                   </span>
                 </div>
               </div>
-              <p className="text-[11px] text-slate-500 mt-4">
-                {assignedCoach?.specialty || 'Head Coach Renang'}
+              <p className="text-[11px] text-slate-500 mt-4 truncate">
+                {assignedCoach
+                  ? `${assignedCoach.specialty || 'Pelatih Renang Resmi'}${assignedCoach.phone ? ` • ${assignedCoach.phone}` : ''}`
+                  : 'Menunggu penentuan pelatih dari Admin'}
               </p>
             </div>
           </div>
@@ -735,6 +786,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       </p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         Jalur: {classSchedule?.lane || `Kolam Renang ${academyProfile?.name || 'Tirta Samudra Academy'}`}
+                      </p>
+                      <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>
+                          Pelatih Pengampu: {assignedCoach?.name || 'Belum Ditentukan Admin'}
+                        </span>
                       </p>
                     </div>
                     <div className="text-left sm:text-right">
@@ -866,66 +923,176 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 onClick={() => setIsEditingProfile(!isEditingProfile)}
                 className={`px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:${roleMeta.accentBg} text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer`}
               >
-                {isEditingProfile ? 'Batal Edit' : 'Edit Profil & Kontak'}
+                {isEditingProfile ? 'Batal Edit' : 'Edit Biodata Peserta'}
               </button>
             </div>
 
             {/* Profile Edit Form or Display */}
             {isEditingProfile ? (
-              <form onSubmit={handleSaveProfile} className="mt-6 space-y-4 max-w-xl">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Jenis Kelamin:
-                  </label>
-                  <select
-                    value={genderInput}
-                    onChange={(e) => setGenderInput(e.target.value as 'Laki-laki' | 'Perempuan')}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              <form onSubmit={handleSaveProfile} className="mt-6 space-y-4 max-w-2xl bg-slate-50/70 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      Formulir Edit Biodata Peserta
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Perbarui data diri, jenis kelamin, tanggal lahir, dan nomor kontak darurat Anda.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Nama Lengkap Peserta:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      placeholder="Masukkan nama lengkap peserta"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Jenis Kelamin:
+                    </label>
+                    <select
+                      value={genderInput}
+                      onChange={(e) => setGenderInput(e.target.value as 'Laki-laki' | 'Perempuan')}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    >
+                      <option value="Laki-laki">Laki-laki</option>
+                      <option value="Perempuan">Perempuan</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Tanggal Lahir:
+                    </label>
+                    <input
+                      type="date"
+                      value={birthDateInput}
+                      onChange={(e) => handleBirthDateChange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Usia (Tahun):
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={80}
+                      value={ageInput}
+                      onChange={(e) => setAgeInput(parseInt(e.target.value, 10) || 1)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Nama Orang Tua / Wali:
+                    </label>
+                    <input
+                      type="text"
+                      value={parentNameInput}
+                      onChange={(e) => setParentNameInput(e.target.value)}
+                      placeholder="Nama Ayah / Ibu / Wali"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Nomor WhatsApp / HP Peserta:
+                    </label>
+                    <input
+                      type="text"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder="08xxxxxxxxxx"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Nomor Kontak Darurat (Keluarga):
+                    </label>
+                    <input
+                      type="text"
+                      value={emergencyInput}
+                      onChange={(e) => setEmergencyInput(e.target.value)}
+                      placeholder="Nomor telepon darurat yang dapat dihubungi"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Pelatih Pengampu (Ditentukan oleh Admin Akademi):
+                    </label>
+                    <div className="w-full px-3.5 py-2.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        {assignedCoach?.avatarUrl && (
+                          <img
+                            src={assignedCoach.avatarUrl}
+                            alt={assignedCoach.name}
+                            className="w-7 h-7 rounded-full object-cover border border-cyan-500"
+                          />
+                        )}
+                        <div>
+                          <p className="text-xs font-extrabold text-cyan-800 dark:text-cyan-300">
+                            {assignedCoach?.name || 'Belum Ada Pelatih Ditentukan'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {assignedCoach?.specialty || 'Pelatih Renang Resmi'} • Telp: {assignedCoach?.phone || '-'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+                        Sinkron Admin
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      Catatan Kesehatan / Adaptasi / Target Latihan:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={notesInput}
+                      onChange={(e) => setNotesInput(e.target.value)}
+                      placeholder="Catatan riwayat kesehatan, alergi, atau fokus latihan..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    className={`px-5 py-2.5 rounded-xl bg-gradient-to-r ${roleMeta.btnGradient} text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-2`}
                   >
-                    <option value="Laki-laki">Laki-laki</option>
-                    <option value="Perempuan">Perempuan</option>
-                  </select>
+                    <Save className="w-4 h-4" />
+                    Simpan Biodata Peserta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingProfile(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                  >
+                    Batal
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Nomor WhatsApp / HP Siswa:
-                  </label>
-                  <input
-                    type="text"
-                    value={phoneInput}
-                    onChange={(e) => setPhoneInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Nama Orang Tua / Wali:
-                  </label>
-                  <input
-                    type="text"
-                    value={parentNameInput}
-                    onChange={(e) => setParentNameInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Kontak Darurat:
-                  </label>
-                  <input
-                    type="text"
-                    value={emergencyInput}
-                    onChange={(e) => setEmergencyInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className={`px-5 py-2.5 rounded-xl bg-gradient-to-r ${roleMeta.btnGradient} text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-2`}
-                >
-                  <Save className="w-4 h-4" />
-                  Simpan Perubahan
-                </button>
               </form>
             ) : (
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -984,16 +1151,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   <p className="text-[11px] text-slate-500 mt-0.5">Hubungi bila ada kendala</p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Pelatih Pengampu
+                <div className="p-4 rounded-2xl bg-cyan-50/50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/60">
+                  <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider">
+                    Pelatih Pengampu (Sinkron Admin)
                   </span>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">
-                    {assignedCoach?.name || 'Coach Hendra Gunawan'}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Telp: {assignedCoach?.phone || '0812-3456-7890'}
-                  </p>
+                  <div className="flex items-center gap-2.5 mt-1.5">
+                    {assignedCoach?.avatarUrl && (
+                      <img
+                        src={assignedCoach.avatarUrl}
+                        alt={assignedCoach.name}
+                        className="w-8 h-8 rounded-full object-cover border border-cyan-500 shrink-0"
+                      />
+                    )}
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+                        {assignedCoach?.name || 'Belum Ada Pelatih Ditentukan'}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {assignedCoach?.specialty || 'Pelatih Renang Resmi'} • Telp: {assignedCoach?.phone || '-'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

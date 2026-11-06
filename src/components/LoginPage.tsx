@@ -27,6 +27,7 @@ import {
   Barcode,
   Camera,
   Usb,
+  Clock,
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -39,6 +40,7 @@ interface LoginPageProps {
   academyProfile?: AcademyProfile;
   onBackToProfile?: () => void;
   isCloudSynced?: boolean;
+  sessionExpiredNotice?: string | null;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
@@ -51,6 +53,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   academyProfile,
   onBackToProfile,
   isCloudSynced = false,
+  sessionExpiredNotice = null,
 }) => {
   // Login method tabs: 'credentials' (Username/Password) or 'barcode' (Barcode Card / Scanner)
   const [loginMethod, setLoginMethod] = useState<'credentials' | 'barcode'>('credentials');
@@ -361,6 +364,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <span>Barcode Kartu</span>
             </button>
           </div>
+
+          {/* 5-Minute Session Timeout Notice */}
+          {sessionExpiredNotice && !errorMessage && (
+            <div className="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+              <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <span>{sessionExpiredNotice}</span>
+            </div>
+          )}
 
           {/* Success Banner */}
           {successNotice && (

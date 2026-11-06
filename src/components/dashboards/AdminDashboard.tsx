@@ -195,11 +195,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateAvatar = () => {},
 }) => {
   // Sub-tabs in Admin Dashboard (supports controlled activeTab from sidebar!)
-  const [internalActiveTab, setInternalActiveTab] = useState<'overview' | 'profiles' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations'>('overview');
+  const [internalActiveTab, setInternalActiveTab] = useState<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations'>('overview');
 
-  const validTabs: Array<'overview' | 'profiles' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'barcode' | 'registrations'> = [
+  const validTabs: Array<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'barcode' | 'registrations'> = [
     'overview',
     'profiles',
+    'coach-assignment',
     'attendance',
     'payments',
     'pricing',
@@ -210,6 +211,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     'barcode',
     'registrations',
   ];
+
+  // Coach Assignment Menu States (Penentuan Pelatih untuk Peserta)
+  const [assignmentSearchTerm, setAssignmentSearchTerm] = useState('');
+  const [assignmentClassFilter, setAssignmentClassFilter] = useState<string>('all');
+  const [assignmentCoachFilter, setAssignmentCoachFilter] = useState<string>('all');
+  const [selectedStudentIdsForCoach, setSelectedStudentIdsForCoach] = useState<string[]>([]);
+  const [bulkTargetCoachId, setBulkTargetCoachId] = useState<string>(() => coaches[0]?.id || 'c1');
 
   // Card printing per class state (Diferensiasi Menu Cetak Kartu Per Kelas)
   const [selectedCardClass, setSelectedCardClass] = useState<string>('all');
@@ -231,13 +239,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     internalActiveTab === 'cards' ||
     (internalActiveTab as string) === 'barcode';
 
-  const activeTab: 'overview' | 'profiles' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations' = isCardsActive
+  const activeTab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations' = isCardsActive
     ? 'cards'
     : controlledActiveTab && validTabs.includes(controlledActiveTab as any)
     ? (controlledActiveTab as any)
     : internalActiveTab;
 
-  const setActiveTab = (tab: 'overview' | 'profiles' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations') => {
+  const setActiveTab = (tab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations') => {
     setInternalActiveTab(tab);
     if (onTabChange) {
       onTabChange(tab);
@@ -357,6 +365,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     parentName: '',
     emergencyContact: '',
     totalQuota: 8,
+    assignedCoachId: coaches[0]?.id || 'c1',
     avatarUrl: '',
     notes: '',
     username: '',
@@ -920,7 +929,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       status: 'active',
       remainingQuota: Number(newStudentData.totalQuota),
       totalQuota: Number(newStudentData.totalQuota),
-      assignedCoachId: 'c1',
+      assignedCoachId: newStudentData.assignedCoachId || coaches[0]?.id || 'c1',
       avatarUrl: newStudentData.avatarUrl.trim() || `https://images.unsplash.com/photo-${1500000000000 + nextNum * 12345}?w=150&auto=format&fit=crop&q=80`,
       notes: newStudentData.notes || 'Siswa baru terdaftar di akademi.',
     };
@@ -953,6 +962,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       parentName: '',
       emergencyContact: '',
       totalQuota: 8,
+      assignedCoachId: coaches[0]?.id || 'c1',
       avatarUrl: '',
       notes: '',
       username: '',
@@ -1088,24 +1098,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
 
     onAddUser(newUser);
-
-    // Jika membuat akun pelatih, pastikan juga otomatis tercatat di data pelatih resmi (coaches)
-    if (isPelatih && onAddCoach) {
-      const newCoach: Coach = {
-        id: coachId || `cch-${Date.now().toString().slice(-5)}`,
-        barcode: autoBarcode || getNextCoachBarcode(),
-        name: newUser.name,
-        specialty: 'Pelatih Renang Resmi (Semua Gaya Renang)',
-        phone: newUser.phone || '08xxxxxxxxxx',
-        email: newUser.email,
-        avatarUrl: newUser.avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-        assignedClasses: ['dasar', 'pemula', 'prestasi', 'privat_4', 'privat_8', 'privat_12'],
-        experienceYears: 3,
-        certifications: ['Lisensi Pelatih Akuatik Nasional'],
-      };
-      onAddCoach(newCoach, { username: newUser.username, password: newUser.password });
-    }
-
     setShowAddUserModal(false);
     showToast(`Akun baru "${newUser.name}" (@${newUser.username}) dengan Barcode "${autoBarcode || '-'}" berhasil dibuat!`, 'success');
     setNewUserData({
@@ -1470,6 +1462,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Manajemen Profil Peserta ({students.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('coach-assignment')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'coach-assignment'
+              ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <UserCheck className="w-4 h-4" />
+          <span>Penentuan Pelatih Peserta</span>
         </button>
 
         <button
@@ -2089,6 +2093,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {privacyMaskActive ? maskPhone(st.emergencyContact) : st.emergencyContact}
                           </span>
                         </div>
+                        <div className="flex items-center justify-between gap-2 pt-1 text-slate-600 dark:text-slate-300">
+                          <span className="text-slate-400 flex items-center gap-1 shrink-0">
+                            <UserCheck className="w-3.5 h-3.5 text-cyan-500" />
+                            Pelatih:
+                          </span>
+                          <select
+                            value={
+                              coaches.some((c) => c.id === st.assignedCoachId)
+                                ? st.assignedCoachId
+                                : coaches[0]?.id || ''
+                            }
+                            onChange={(e) => {
+                              const newCoachId = e.target.value;
+                              if (!newCoachId) return;
+                              const coachObj = coaches.find((c) => c.id === newCoachId);
+                              onUpdateStudent({
+                                ...st,
+                                assignedCoachId: newCoachId,
+                              });
+                              showToast(
+                                `Pelatih untuk "${st.name}" ditetapkan ke ${coachObj?.name || 'Pelatih'}`,
+                                'success'
+                              );
+                            }}
+                            className="px-2 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-500/30 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer max-w-[175px] truncate"
+                          >
+                            <option value="" disabled>
+                              -- Pilih Pelatih --
+                            </option>
+                            {coaches.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       {/* Quota Sesi & Total Absen Dilaksanakan */}
@@ -2156,6 +2196,401 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* TAB 2B: PENENTUAN PELATIH UNTUK PESERTA YANG DILATIH     */}
+      {/* ======================================================== */}
+      {activeTab === 'coach-assignment' && (() => {
+        const filteredStudentsForCoach = students.filter((st) => {
+          const matchesSearch =
+            !assignmentSearchTerm.trim() ||
+            st.name.toLowerCase().includes(assignmentSearchTerm.toLowerCase()) ||
+            st.barcode.toLowerCase().includes(assignmentSearchTerm.toLowerCase());
+          const matchesClass =
+            assignmentClassFilter === 'all' || st.roleClass === assignmentClassFilter;
+          const matchesCoach =
+            assignmentCoachFilter === 'all'
+              ? true
+              : assignmentCoachFilter === 'unassigned'
+              ? !st.assignedCoachId || !coaches.some((c) => c.id === st.assignedCoachId)
+              : st.assignedCoachId === assignmentCoachFilter;
+          return matchesSearch && matchesClass && matchesCoach;
+        });
+
+        const handleBulkAssignCoach = () => {
+          if (selectedStudentIdsForCoach.length === 0) {
+            showToast('Pilih minimal 1 peserta terlebih dahulu untuk ditentukan pelatihnya.', 'info');
+            return;
+          }
+          const targetCoach = coaches.find((c) => c.id === bulkTargetCoachId) || coaches[0];
+          if (!targetCoach) return;
+
+          selectedStudentIdsForCoach.forEach((studentId) => {
+            const st = students.find((s) => s.id === studentId);
+            if (st) {
+              onUpdateStudent({
+                ...st,
+                assignedCoachId: targetCoach.id,
+              });
+            }
+          });
+
+          showToast(
+            `${selectedStudentIdsForCoach.length} peserta berhasil ditetapkan ke pelatih ${targetCoach.name}!`,
+            'success'
+          );
+          setSelectedStudentIdsForCoach([]);
+        };
+
+        const toggleSelectStudentForCoach = (id: string) => {
+          setSelectedStudentIdsForCoach((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+          );
+        };
+
+        const toggleSelectAllFiltered = () => {
+          const allFilteredIds = filteredStudentsForCoach.map((s) => s.id);
+          const allSelected =
+            allFilteredIds.length > 0 &&
+            allFilteredIds.every((id) => selectedStudentIdsForCoach.includes(id));
+          if (allSelected) {
+            setSelectedStudentIdsForCoach((prev) =>
+              prev.filter((id) => !allFilteredIds.includes(id))
+            );
+          } else {
+            setSelectedStudentIdsForCoach((prev) =>
+              Array.from(new Set([...prev, ...allFilteredIds]))
+            );
+          }
+        };
+
+        return (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header Info Banner */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs font-bold mb-2">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Manajemen Pembagian Pelatih &amp; Murid Binaan</span>
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
+                  Penentuan Pelatih untuk Peserta yang Akan Dilatih
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+                  Atur dan tentukan siapa pelatih pengampu untuk masing-masing peserta (secara perorangan maupun sekaligus per kelas). Perubahan langsung tersinkronisasi ke Dashboard Pelatih dan Profil Peserta.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAddCoach}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Pelatih Baru</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Coach Summary Cards (Distribusi Peserta per Pelatih) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {coaches.map((c) => {
+                const assignedList = students.filter((s) => s.assignedCoachId === c.id);
+                const isSelectedFilter = assignmentCoachFilter === c.id;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() =>
+                      setAssignmentCoachFilter(isSelectedFilter ? 'all' : c.id)
+                    }
+                    className={`p-5 rounded-3xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelectedFilter
+                        ? 'bg-cyan-50/90 dark:bg-cyan-950/40 border-cyan-500 shadow-md shadow-cyan-500/10'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-cyan-400'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={c.avatarUrl}
+                          alt={c.name}
+                          className="w-12 h-12 rounded-2xl object-cover border-2 border-cyan-400 shadow-sm shrink-0"
+                        />
+                        <div>
+                          <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            {c.name}
+                          </h3>
+                          <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-mono font-bold">
+                            {c.barcode || 'AQUA-CCH'}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
+                            {c.specialty}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-xs font-extrabold shrink-0">
+                        {assignedList.length} Peserta
+                      </span>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">
+                        Telp: <strong className="text-slate-700 dark:text-slate-300">{c.phone}</strong>
+                      </span>
+                      <span className="font-bold text-cyan-600 dark:text-cyan-400">
+                        {isSelectedFilter ? 'Tampilkan Semua' : 'Filter Peserta Ini →'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bulk Assignment Bar (Penentuan Pelatih Sekaligus / Massal) */}
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border border-cyan-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-md shadow-cyan-600/20">
+                  {selectedStudentIdsForCoach.length}
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                    Penentuan Pelatih Massal ({selectedStudentIdsForCoach.length} Peserta Dipilih)
+                  </h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                    Centang peserta pada tabel di bawah, pilih nama pelatih, lalu klik <strong>Terapkan Pelatih</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={bulkTargetCoachId}
+                  onChange={(e) => setBulkTargetCoachId(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Latih dengan: {c.name} ({c.specialty})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleBulkAssignCoach}
+                  className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs shadow-md shadow-cyan-600/20 flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Terapkan Pelatih ke Peserta Terpilih</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={assignmentSearchTerm}
+                    onChange={(e) => setAssignmentSearchTerm(e.target.value)}
+                    placeholder="Cari nama peserta atau kode barcode..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <select
+                    value={assignmentClassFilter}
+                    onChange={(e) => setAssignmentClassFilter(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="all">Semua Kelas Renang ({students.length} Peserta)</option>
+                    <option value="dasar">Kelas Dasar</option>
+                    <option value="pemula">Kelas Pemula</option>
+                    <option value="prestasi">Kelas Prestasi</option>
+                    <option value="privat_4">Privat 4 Sesi</option>
+                    <option value="privat_8">Privat 8 Sesi</option>
+                    <option value="privat_12">Privat 12 Sesi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <select
+                    value={assignmentCoachFilter}
+                    onChange={(e) => setAssignmentCoachFilter(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="all">Semua Pelatih Pengampu</option>
+                    {coaches.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Dilatih oleh: {c.name}
+                      </option>
+                    ))}
+                    <option value="unassigned">Belum Ada Pelatih</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Participant Coach Assignment Table */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3.5 px-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredStudentsForCoach.length > 0 &&
+                            filteredStudentsForCoach.every((s) =>
+                              selectedStudentIdsForCoach.includes(s.id)
+                            )
+                          }
+                          onChange={toggleSelectAllFiltered}
+                          className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="py-3.5 px-4">Peserta / Siswa</th>
+                      <th className="py-3.5 px-4">Kelas &amp; Kuota</th>
+                      <th className="py-3.5 px-4">Usia &amp; Gender</th>
+                      <th className="py-3.5 px-4">Pelatih Saat Ini</th>
+                      <th className="py-3.5 px-4">Tentukan / Ubah Pelatih Peserta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredStudentsForCoach.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-slate-400 font-semibold">
+                          Tidak ada peserta yang sesuai dengan filter pencarian.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredStudentsForCoach.map((st) => {
+                        const currentCoach =
+                          coaches.find((c) => c.id === st.assignedCoachId) || coaches[0];
+                        const roleMeta = ROLE_LABELS[st.roleClass];
+                        const isChecked = selectedStudentIdsForCoach.includes(st.id);
+
+                        return (
+                          <tr
+                            key={st.id}
+                            className={`transition-colors ${
+                              isChecked
+                                ? 'bg-cyan-50/60 dark:bg-cyan-950/30'
+                                : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <td className="py-3.5 px-4">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleSelectStudentForCoach(st.id)}
+                                className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={st.avatarUrl}
+                                  alt={st.name}
+                                  className="w-10 h-10 rounded-xl object-cover border border-cyan-400/50 shrink-0"
+                                />
+                                <div>
+                                  <p className="font-extrabold text-slate-900 dark:text-white">
+                                    {st.name}
+                                  </p>
+                                  <p className="font-mono text-[10px] font-bold text-cyan-600 dark:text-cyan-400">
+                                    {st.barcode}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`inline-block text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${roleMeta.badgeBg}`}
+                              >
+                                {roleMeta.textBadge}
+                              </span>
+                              <p className="text-[11px] text-slate-500 mt-1">
+                                Sisa Kuota: <strong>{st.remainingQuota}</strong> / {st.totalQuota} Sesi
+                              </p>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <p className="font-bold text-slate-800 dark:text-slate-200">
+                                {st.age} Tahun
+                              </p>
+                              <p className="text-[11px] text-slate-500">{st.gender || 'Laki-laki'}</p>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {currentCoach ? (
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={currentCoach.avatarUrl}
+                                    alt={currentCoach.name}
+                                    className="w-7 h-7 rounded-full object-cover border border-emerald-400"
+                                  />
+                                  <div>
+                                    <p className="font-bold text-emerald-700 dark:text-emerald-400 text-xs">
+                                      {currentCoach.name}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 truncate max-w-[160px]">
+                                      {currentCoach.specialty}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-amber-500 font-bold text-xs">
+                                  Belum Ditentukan
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <select
+                                value={
+                                  coaches.some((c) => c.id === st.assignedCoachId)
+                                    ? st.assignedCoachId
+                                    : coaches[0]?.id || ''
+                                }
+                                onChange={(e) => {
+                                  const newCoachId = e.target.value;
+                                  if (!newCoachId) return;
+                                  const targetCoach = coaches.find((c) => c.id === newCoachId);
+                                  onUpdateStudent({
+                                    ...st,
+                                    assignedCoachId: newCoachId,
+                                  });
+                                  showToast(
+                                    `Pelatih untuk peserta "${st.name}" berhasil ditetapkan ke ${
+                                      targetCoach?.name || 'Pelatih'
+                                    }!`,
+                                    'success'
+                                  );
+                                }}
+                                className="w-full max-w-[230px] px-3 py-2 rounded-xl bg-cyan-50/80 dark:bg-slate-800 border border-cyan-500/40 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+                              >
+                                <option value="" disabled>
+                                  -- Pilih Pelatih Pengampu --
+                                </option>
+                                {coaches.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name} ({c.barcode || 'Pelatih'})
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ======================================================== */}
       {/* TAB 3: ABSEN & TOTAL ABSEN                                */}
@@ -5334,6 +5769,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>Pelatih Pengampu yang Melatih Peserta Ini</span>
+                </label>
+                <select
+                  value={
+                    coaches.some((c) => c.id === editingStudent.assignedCoachId)
+                      ? editingStudent.assignedCoachId
+                      : coaches[0]?.id || ''
+                  }
+                  onChange={(e) =>
+                    setEditingStudent({
+                      ...editingStudent,
+                      assignedCoachId: e.target.value,
+                    })
+                  }
+                  className="w-full mt-1 px-3 py-2 bg-cyan-50/70 dark:bg-slate-800 border border-cyan-500/40 rounded-xl font-bold text-slate-900 dark:text-white"
+                >
+                  <option value="" disabled>
+                    -- Pilih Pelatih Pengampu --
+                  </option>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {c.specialty}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300">Orang Tua / Wali</label>
@@ -5587,6 +6052,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <option value="Perempuan">Perempuan</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>Tentukan Pelatih untuk Peserta Ini</span>
+                </label>
+                <select
+                  value={
+                    coaches.some((c) => c.id === newStudentData.assignedCoachId)
+                      ? newStudentData.assignedCoachId
+                      : coaches[0]?.id || ''
+                  }
+                  onChange={(e) =>
+                    setNewStudentData({
+                      ...newStudentData,
+                      assignedCoachId: e.target.value,
+                    })
+                  }
+                  className="w-full mt-1 px-3 py-2 bg-cyan-50/70 dark:bg-slate-800 border border-cyan-500/40 rounded-xl font-bold text-slate-900 dark:text-white"
+                >
+                  <option value="" disabled>
+                    -- Pilih Pelatih Pengampu --
+                  </option>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {c.specialty}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

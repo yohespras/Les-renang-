@@ -68,11 +68,29 @@ export default function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Authentication State
+  // Session Login Duration: 5 Minutes (300,000 ms)
+  const SESSION_DURATION_MS = 5 * 60 * 1000;
+
+  // Authentication State (checks 5-minute session validity on load)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem('AQUA_AUTH_USER');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const expiresAtStr = localStorage.getItem('AQUA_SESSION_EXPIRES_AT');
+    if (expiresAtStr) {
+      const expiresAt = parseInt(expiresAtStr, 10);
+      if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+        localStorage.removeItem('AQUA_AUTH_USER');
+        localStorage.removeItem('AQUA_SESSION_EXPIRES_AT');
+        return null;
+      }
+    } else {
+      localStorage.setItem('AQUA_SESSION_EXPIRES_AT', String(Date.now() + SESSION_DURATION_MS));
+    }
+    return JSON.parse(saved);
   });
+
+  const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number>(300);
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
 
   // Active Role state
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
@@ -355,8 +373,20 @@ export default function App() {
 
   // Filter students belonging to current role
   const studentsInCurrentRole = students.filter((s) => s.roleClass === currentRole);
+  const matchedLoggedStudent =
+    currentUser && currentUser.role !== 'admin' && currentUser.role !== 'pelatih'
+      ? students.find(
+          (s) =>
+            (currentUser.studentId && s.id === currentUser.studentId) ||
+            (currentUser.barcode && s.barcode.toLowerCase() === currentUser.barcode.toLowerCase()) ||
+            s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase()
+        )
+      : undefined;
+
   const currentStudent =
+    matchedLoggedStudent ||
     studentsInCurrentRole.find((s) => s.id === selectedStudentId) ||
+    students.find((s) => s.id === selectedStudentId) ||
     studentsInCurrentRole[0] ||
     students[0];
 
@@ -370,10 +400,22 @@ export default function App() {
     setActiveView('overview');
   };
 
-  // Login Handler
+  // Extend 5-Minute Login Session
+  const handleExtendSession = () => {
+    if (!currentUser) return;
+    const nextExpires = Date.now() + SESSION_DURATION_MS;
+    localStorage.setItem('AQUA_SESSION_EXPIRES_AT', String(nextExpires));
+    setSessionRemainingSeconds(300);
+  };
+
+  // Login Handler (Starts 5-Minute Session)
   const handleLoginSuccess = (user: AuthUser) => {
-    setCurrentUser(user);
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
+    localStorage.setItem('AQUA_SESSION_EXPIRES_AT', String(expiresAt));
     localStorage.setItem('AQUA_AUTH_USER', JSON.stringify(user));
+    setSessionRemainingSeconds(300);
+    setSessionExpiredMessage(null);
+    setCurrentUser(user);
     setCurrentRole(user.role);
     if (user.studentId) {
       setSelectedStudentId(user.studentId);
@@ -389,8 +431,61 @@ export default function App() {
   // Logout Handler
   const handleLogout = () => {
     localStorage.removeItem('AQUA_AUTH_USER');
+    localStorage.removeItem('AQUA_SESSION_EXPIRES_AT');
     setCurrentUser(null);
   };
+
+  // 5-Minute Session Countdown & Automatic Logout Effect
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Ensure expiration timestamp exists
+    if (!localStorage.getItem('AQUA_SESSION_EXPIRES_AT')) {
+      localStorage.setItem('AQUA_SESSION_EXPIRES_AT', String(Date.now() + SESSION_DURATION_MS));
+    }
+
+    let lastActivityReset = 0;
+    const refreshSessionOnActivity = () => {
+      const now = Date.now();
+      // Throttle activity resets to once every 10 seconds while user is actively interacting
+      if (now - lastActivityReset > 10000) {
+        lastActivityReset = now;
+        const currentExp = parseInt(localStorage.getItem('AQUA_SESSION_EXPIRES_AT') || '0', 10);
+        if (currentExp > now) {
+          localStorage.setItem('AQUA_SESSION_EXPIRES_AT', String(now + SESSION_DURATION_MS));
+        }
+      }
+    };
+
+    window.addEventListener('mousedown', refreshSessionOnActivity);
+    window.addEventListener('keydown', refreshSessionOnActivity);
+    window.addEventListener('touchstart', refreshSessionOnActivity);
+
+    const interval = setInterval(() => {
+      const expiresAtStr = localStorage.getItem('AQUA_SESSION_EXPIRES_AT');
+      const expiresAt = expiresAtStr ? parseInt(expiresAtStr, 10) : Date.now() + SESSION_DURATION_MS;
+      const diffMs = expiresAt - Date.now();
+      if (diffMs <= 0) {
+        clearInterval(interval);
+        localStorage.removeItem('AQUA_AUTH_USER');
+        localStorage.removeItem('AQUA_SESSION_EXPIRES_AT');
+        setCurrentUser(null);
+        setPreLoginView('login');
+        setSessionExpiredMessage(
+          'Sesi login 5 menit Anda telah berakhir secara otomatis demi keamanan akun. Silakan login kembali.'
+        );
+      } else {
+        setSessionRemainingSeconds(Math.ceil(diffMs / 1000));
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousedown', refreshSessionOnActivity);
+      window.removeEventListener('keydown', refreshSessionOnActivity);
+      window.removeEventListener('touchstart', refreshSessionOnActivity);
+    };
+  }, [currentUser]);
 
   // Otomatis sinkronisasi currentUser saat appUsers diperbarui dari Cloud Firestore
   useEffect(() => {
@@ -808,6 +903,117 @@ export default function App() {
     });
   }, [coaches]);
 
+  // Auto-sync sebaliknya: Pastikan setiap akun ber-role 'pelatih' di Manajemen User selalu terdaftar di daftar coaches
+  useEffect(() => {
+    const coachUsers = appUsers.filter((u) => u.role === 'pelatih');
+    if (coachUsers.length === 0) return;
+
+    setCoaches((prevCoaches) => {
+      let hasChanges = false;
+      let updatedCoaches = [...prevCoaches];
+      const newlyCreatedCoaches: Coach[] = [];
+
+      coachUsers.forEach((u, idx) => {
+        const existingIndex = updatedCoaches.findIndex(
+          (c) =>
+            (u.coachId && c.id === u.coachId) ||
+            c.id === u.id ||
+            (u.barcode && c.barcode === u.barcode) ||
+            c.name.trim().toLowerCase() === u.name.trim().toLowerCase()
+        );
+
+        if (existingIndex === -1) {
+          hasChanges = true;
+          const newCoach: Coach = {
+            id: u.coachId || `cch-${u.id.replace(/[^a-zA-Z0-9]/g, '')}`,
+            barcode: u.barcode || `AQUA-CCH-10${updatedCoaches.length + idx + 1}`,
+            name: u.name,
+            specialty: 'Pelatih Renang Resmi Akademi',
+            phone: u.phone || '08xxxxxxxxxx',
+            email: u.email,
+            avatarUrl:
+              u.avatarUrl ||
+              'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            assignedClasses: ['dasar', 'pemula', 'prestasi', 'privat_4', 'privat_8', 'privat_12'],
+            experienceYears: 3,
+            certifications: ['Lisensi Pelatih Akuatik Nasional'],
+          };
+          updatedCoaches = [...updatedCoaches, newCoach];
+          newlyCreatedCoaches.push(newCoach);
+        }
+      });
+
+      if (hasChanges) {
+        localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+        newlyCreatedCoaches.forEach((c) => syncSaveCoach(c));
+        return updatedCoaches;
+      }
+      return prevCoaches;
+    });
+  }, [appUsers]);
+
+  // Auto-sync: Pastikan assignedCoachId pada setiap siswa selalu sinkron dengan ID pelatih yang valid di Admin
+  useEffect(() => {
+    if (coaches.length === 0 || students.length === 0) return;
+
+    let hasStudentCoachFix = false;
+    const fixedStudents: Student[] = [];
+
+    const nextStudents = students.map((st) => {
+      // 1. Cek apakah assignedCoachId sudah cocok dengan salah satu id pelatih di coaches
+      const exactMatch = coaches.find((c) => c.id === st.assignedCoachId);
+      if (exactMatch) return st;
+
+      // 2. Cek apakah assignedCoachId cocok dengan barcode, nama, atau userId pelatih
+      const matchedByOther = coaches.find(
+        (c) =>
+          (c.barcode && c.barcode === st.assignedCoachId) ||
+          c.name.trim().toLowerCase() === (st.assignedCoachId || '').trim().toLowerCase()
+      );
+      if (matchedByOther) {
+        hasStudentCoachFix = true;
+        const updatedSt = { ...st, assignedCoachId: matchedByOther.id };
+        fixedStudents.push(updatedSt);
+        return updatedSt;
+      }
+
+      // 3. Cek apakah cocok melalui akun user pelatih (appUsers)
+      const matchedCoachUser = appUsers.find(
+        (u) => u.role === 'pelatih' && (u.id === st.assignedCoachId || u.coachId === st.assignedCoachId)
+      );
+      if (matchedCoachUser) {
+        const targetCoach = coaches.find(
+          (c) =>
+            c.id === matchedCoachUser.coachId ||
+            (matchedCoachUser.barcode && c.barcode === matchedCoachUser.barcode) ||
+            c.name.trim().toLowerCase() === matchedCoachUser.name.trim().toLowerCase()
+        );
+        if (targetCoach && targetCoach.id !== st.assignedCoachId) {
+          hasStudentCoachFix = true;
+          const updatedSt = { ...st, assignedCoachId: targetCoach.id };
+          fixedStudents.push(updatedSt);
+          return updatedSt;
+        }
+      }
+
+      // 4. Jika assignedCoachId masih placeholder lama ('c1') atau kosong, otomatis sinkronkan ke pelatih pertama yang aktif di Admin
+      if (!st.assignedCoachId || st.assignedCoachId === 'c1' || !coaches.some((c) => c.id === st.assignedCoachId)) {
+        hasStudentCoachFix = true;
+        const updatedSt = { ...st, assignedCoachId: coaches[0].id };
+        fixedStudents.push(updatedSt);
+        return updatedSt;
+      }
+
+      return st;
+    });
+
+    if (hasStudentCoachFix) {
+      setStudents(nextStudents);
+      localStorage.setItem('AQUA_STUDENTS', JSON.stringify(nextStudents));
+      fixedStudents.forEach((s) => syncSaveStudent(s));
+    }
+  }, [coaches, students, appUsers]);
+
   // Delete coach
   const handleDeleteCoach = (coachId: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus data pelatih ini? Akun login pengguna terkait di Manajemen User juga akan dihapus.')) {
@@ -830,9 +1036,11 @@ export default function App() {
 
   // Update existing student
   const handleUpdateStudent = (updatedStudent: Student) => {
-    const updated = students.map((s) => (s.id === updatedStudent.id ? updatedStudent : s));
-    setStudents(updated);
-    localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updated));
+    setStudents((prev) => {
+      const updated = prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s));
+      localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updated));
+      return updated;
+    });
     syncSaveStudent(updatedStudent);
 
     // Sinkronisasi data ke Manajemen User & Cloud Firestore
@@ -1012,6 +1220,7 @@ export default function App() {
         const updatedCoaches = [newCoach, ...coaches];
         setCoaches(updatedCoaches);
         localStorage.setItem('AQUA_COACHES', JSON.stringify(updatedCoaches));
+        syncSaveCoach(newCoach);
       }
     }
   };
@@ -1508,6 +1717,7 @@ export default function App() {
         academyProfile={academyProfile}
         onBackToProfile={() => setPreLoginView('profile')}
         isCloudSynced={isCloudSynced}
+        sessionExpiredNotice={sessionExpiredMessage}
       />
     );
   }
@@ -1727,6 +1937,8 @@ export default function App() {
           currentUser={currentUser}
           onLogout={handleLogout}
           academyProfile={academyProfile}
+          sessionRemainingSeconds={sessionRemainingSeconds}
+          onExtendSession={handleExtendSession}
         />
 
         {/* Page Body */}
@@ -1746,8 +1958,16 @@ export default function App() {
           students={students}
           attendances={attendances}
           onAttendanceRecorded={handleAttendanceRecorded}
-          activeCoachName="Coach Hendra Gunawan"
-          activeCoachId="c1"
+          activeCoachName={
+            (currentUser?.role === 'pelatih' ? currentUser.name : undefined) ||
+            coaches[0]?.name ||
+            'Pelatih Resmi'
+          }
+          activeCoachId={
+            (currentUser?.role === 'pelatih' ? currentUser.coachId || currentUser.id : undefined) ||
+            coaches[0]?.id ||
+            'c1'
+          }
         />
       )}
 

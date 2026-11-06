@@ -26,6 +26,7 @@ import {
   Phone,
   Mail,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { compressAndResizeImage } from '../services/imageUtils';
@@ -49,6 +50,8 @@ interface NavbarProps {
   currentUser: AuthUser | null;
   onLogout: () => void;
   academyProfile?: AcademyProfile;
+  sessionRemainingSeconds?: number;
+  onExtendSession?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -70,6 +73,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onLogout,
   academyProfile,
+  sessionRemainingSeconds = 300,
+  onExtendSession,
 }) => {
   const roleMeta = ROLE_LABELS[currentRole];
   const liveProfile = getLiveAcademyProfile(academyProfile);
@@ -230,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-                {/* Cloud Sync Status */}
+        {/* Cloud Sync Status */}
         <div title="Cloud Firestore Real-Time: Data tersinkron otomatis antar HP, Tablet & Laptop" className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 text-[11px] font-semibold text-cyan-700 dark:text-cyan-300">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -238,6 +243,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
           <span className="hidden md:inline">Cloud Sync</span>
         </div>
+
+        {/* 5-Minute Session Timer Badge */}
+        {currentUser && (
+          <button
+            type="button"
+            onClick={() => onExtendSession && onExtendSession()}
+            title="Sesi Login Aktif 5 Menit (Klik untuk perbarui waktu sesi 5 menit)"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer ${
+              sessionRemainingSeconds <= 60
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 animate-pulse'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>
+              {String(Math.floor(sessionRemainingSeconds / 60)).padStart(2, '0')}:
+              {String(sessionRemainingSeconds % 60).padStart(2, '0')}
+            </span>
+          </button>
+        )}
 
         {/* PWA Install Button */}
         <PWAInstallButton variant="compact" />

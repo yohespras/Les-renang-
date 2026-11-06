@@ -147,6 +147,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: Users,
           },
           {
+            id: 'coach-assignment',
+            label: 'Penentuan Pelatih Peserta',
+            desc: 'Tentukan pelatih untuk peserta yang dilatih',
+            icon: UserCheck,
+          },
+          {
             id: 'attendance',
             label: 'Absen & Total Absen',
             desc: 'Rekap kehadiran & verifikasi barcode',
@@ -265,8 +271,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             id: 'profile',
-            label: 'Profil Siswa',
-            desc: `Biodata siswa sesuai ${roleConfig.title}`,
+            label: 'Profil & Edit Biodata',
+            desc: `Lihat & edit biodata peserta ${roleConfig.title}`,
             icon: Users,
           },
           {
