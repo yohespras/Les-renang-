@@ -20,6 +20,7 @@ import {
   StudentRegistration,
   ClassPricingPackage,
   GalleryItem,
+  SessionCompletionNotification,
 } from '../types';
 import {
   INITIAL_APP_USERS,
@@ -322,6 +323,31 @@ export async function saveGalleryItemToFirestore(item: GalleryItem): Promise<voi
 
 export async function deleteGalleryItemFromFirestore(id: string): Promise<void> {
   await deleteFirestoreDoc('galleryItems', id);
+}
+
+// SESSION COMPLETION NOTIFICATIONS
+export function subscribeSessionNotifications(
+  onUpdate: (notifications: SessionCompletionNotification[]) => void
+): Unsubscribe {
+  return subscribeFirestoreCollection<SessionCompletionNotification>(
+    'sessionNotifications',
+    (items) => {
+      const sorted = [...items].sort((a, b) =>
+        (b.sentAt || '').localeCompare(a.sentAt || '')
+      );
+      onUpdate(sorted);
+    }
+  );
+}
+
+export async function saveSessionNotificationToFirestore(
+  notification: SessionCompletionNotification
+): Promise<void> {
+  await upsertFirestoreDoc('sessionNotifications', notification);
+}
+
+export async function deleteSessionNotificationFromFirestore(id: string): Promise<void> {
+  await deleteFirestoreDoc('sessionNotifications', id);
 }
 
 

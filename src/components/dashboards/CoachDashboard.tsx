@@ -1,5 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { Student, AttendanceRecord, PoolSchedule, Coach, AuthUser, ClassPricingPackage, UserRole } from '../../types';
+import {
+  Student,
+  AttendanceRecord,
+  PoolSchedule,
+  Coach,
+  AuthUser,
+  ClassPricingPackage,
+  UserRole,
+  SessionCompletionNotification,
+  BankAccountInfo,
+  AcademyProfile,
+} from '../../types';
 import {
   ScanLine,
   Award,
@@ -25,9 +36,18 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
+  Edit,
+  Trash2,
+  Plus,
+  History,
+  Bell,
+  X,
+  Info,
+  Send,
 } from 'lucide-react';
 import { compressAndResizeImage } from '../../services/imageUtils';
 import { CoachPersonalProfile } from './CoachPersonalProfile';
+import { SessionNotificationManager } from '../SessionNotificationManager';
 import { ROLE_LABELS, getEffectiveStudentQuota, getLiveAcademyProfile } from '../../data/mockData';
 
 interface CoachDashboardProps {
@@ -45,6 +65,16 @@ interface CoachDashboardProps {
   onViewCoachBarcode?: (coach: Coach) => void;
   onUpdateCoachAvatar?: (newAvatarUrl: string, coachId: string) => void;
   onUpdateCoach?: (updatedCoach: Coach) => void;
+  onAddAttendance?: (newRecord: AttendanceRecord) => void;
+  onUpdateAttendance?: (updatedRecord: AttendanceRecord) => void;
+  onDeleteAttendance?: (attendanceId: string) => void;
+  onUpdateTotalAttendance?: (studentId: string, executedSessions: number, totalQuota: number, remainingQuota: number) => void;
+  onResetStudentAttendance?: (studentId: string) => void;
+  notifications?: SessionCompletionNotification[];
+  onSendNotification?: (notif: SessionCompletionNotification) => void;
+  onDeleteNotification?: (id: string) => void;
+  bankAccounts?: BankAccountInfo[];
+  academyProfile?: AcademyProfile;
 }
 
 export const CoachDashboard: React.FC<CoachDashboardProps> = ({
@@ -62,12 +92,22 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
   onViewCoachBarcode,
   onUpdateCoachAvatar,
   onUpdateCoach,
+  onAddAttendance,
+  onUpdateAttendance,
+  onDeleteAttendance,
+  onUpdateTotalAttendance,
+  onResetStudentAttendance,
+  notifications = [],
+  onSendNotification,
+  onDeleteNotification,
+  bankAccounts = [],
+  academyProfile,
 }) => {
   const currentCoach = coaches.find((c) => c.id === activeCoachId) || coaches[0];
-  const [internalTab, setInternalTab] = useState<'overview' | 'attendance' | 'profile' | 'schedules' | 'evaluation'>('overview');
+  const [internalTab, setInternalTab] = useState<'overview' | 'attendance' | 'notifications' | 'profile' | 'schedules' | 'evaluation'>('overview');
   const currentActiveTab = (activeTab as any) || internalTab;
 
-  const setActiveTab = (t: 'overview' | 'attendance' | 'profile' | 'schedules' | 'evaluation') => {
+  const setActiveTab = (t: 'overview' | 'attendance' | 'notifications' | 'profile' | 'schedules' | 'evaluation') => {
     setInternalTab(t);
     if (onTabChange) onTabChange(t);
   };
@@ -116,17 +156,75 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
   const [evalSubmitted, setEvalSubmitted] = useState(false);
   const [presenceFilter, setPresenceFilter] = useState<'today' | 'all'>('today');
 
+  // Attendance CRUD & Notification States
   const todayStr = new Date().toISOString().split('T')[0];
+  const [logDateFilter, setLogDateFilter] = useState<string>('');
+  const [coachFeedback, setCoachFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [preselectedNotifStudentId, setPreselectedNotifStudentId] = useState<string | null>(null);
+
+  const showCoachToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setCoachFeedback({ type, message });
+    setTimeout(() => setCoachFeedback(null), 4500);
+  };
+
+  // Manual Attendance Modal State
+  const [showAddAttendanceModal, setShowAddAttendanceModal] = useState(false);
+  const [newAttendanceData, setNewAttendanceData] = useState({
+    studentId: students[0]?.id || '',
+    dateStr: todayStr,
+    timeStr: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB',
+    status: 'hadir' as 'hadir' | 'izin' | 'alpa',
+    poolLane: 'Kolam Utama - Jalur Pelatihan',
+    notes: 'Input Absen oleh Pelatih',
+  });
+
+  // Edit Single Attendance Modal State
+  const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
+  const [editAttendanceData, setEditAttendanceData] = useState({
+    dateStr: '',
+    timeStr: '',
+    status: 'hadir' as 'hadir' | 'izin' | 'alpa',
+    poolLane: '',
+    coachName: '',
+    notes: '',
+  });
+
+  // Confirm Delete Single Attendance Modal State
+  const [confirmDeleteAtt, setConfirmDeleteAtt] = useState<AttendanceRecord | null>(null);
+
+  // Edit Total Attendance & Quota Modal State
+  const [editingTotalStudent, setEditingTotalStudent] = useState<Student | null>(null);
+  const [editTotalData, setEditTotalData] = useState({
+    executedSessions: 0,
+    totalQuota: 8,
+    remainingQuota: 8,
+  });
+
+  // Student Attendance History Modal State
+  const [viewingHistoryStudent, setViewingHistoryStudent] = useState<Student | null>(null);
+
   const todayAttendances = attendances.filter((att) => att.dateStr === todayStr);
   const displayedAttendances = presenceFilter === 'today' ? todayAttendances : attendances;
 
-  // Quota & Attendance Calculation Helpers
+  // Quota & Attendance Calculation Helpers (strict isolation per student, matching AdminDashboard)
   const getStudentExecutedAttendance = (st: Student): number => {
+    const logs = attendances.filter((a) => {
+      const isPresent = a.status === 'hadir' || !a.status;
+      if (!isPresent) return false;
+      if (a.studentId) return a.studentId === st.id;
+      if (a.studentBarcode && st.barcode) {
+        return (
+          a.studentBarcode.trim().toUpperCase() === st.barcode.trim().toUpperCase() &&
+          a.studentName?.trim().toLowerCase() === st.name?.trim().toLowerCase()
+        );
+      }
+      return !!a.studentName && a.studentName.trim().toLowerCase() === st.name?.trim().toLowerCase();
+    });
+
     if (typeof st.manualExecutedSessions === 'number' && st.manualExecutedSessions >= 0) {
-      return st.manualExecutedSessions;
+      return Math.max(logs.length, st.manualExecutedSessions);
     }
-    const studentLogs = attendances.filter((a) => a.studentId === st.id && a.status === 'hadir');
-    return studentLogs.length;
+    return logs.length;
   };
 
   const getStudentEffectiveQuota = (st: Student): number => {
@@ -238,6 +336,120 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
     return matchSearch && matchRole && matchCoachScope && matchStatus;
   });
 
+  // Attendance CRUD Handlers for Coach
+  const handleAddManualAttendanceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetSt = students.find((s) => s.id === newAttendanceData.studentId) || students[0];
+    if (!targetSt) return;
+
+    const duplicateSameDate = attendances.find(
+      (a) => a.studentId === targetSt.id && a.dateStr === newAttendanceData.dateStr
+    );
+    if (duplicateSameDate) {
+      showCoachToast(
+        `${targetSt.name} sudah memiliki catatan absen pada tanggal ${newAttendanceData.dateStr}. Gunakan tombol Edit jika ingin mengubahnya.`,
+        'error'
+      );
+      return;
+    }
+
+    const newRec: AttendanceRecord = {
+      id: `att-${Date.now()}`,
+      studentId: targetSt.id,
+      studentName: targetSt.name,
+      studentBarcode: targetSt.barcode,
+      roleClass: targetSt.roleClass,
+      dateStr: newAttendanceData.dateStr,
+      timeStr: newAttendanceData.timeStr,
+      coachId: currentCoach.id,
+      coachName: currentCoach.name,
+      status: newAttendanceData.status,
+      poolLane: newAttendanceData.poolLane,
+      verifiedByBarcode: false,
+      notes: newAttendanceData.notes || `Dicatat oleh ${currentCoach.name}`,
+    };
+
+    onAddAttendance?.(newRec);
+    setShowAddAttendanceModal(false);
+    showCoachToast(`Absensi manual "${targetSt.name}" tanggal ${newAttendanceData.dateStr} berhasil ditambahkan!`, 'success');
+  };
+
+  const handleOpenEditAttendance = (att: AttendanceRecord) => {
+    setEditingAttendance(att);
+    setEditAttendanceData({
+      dateStr: att.dateStr,
+      timeStr: att.timeStr,
+      status: att.status || 'hadir',
+      poolLane: att.poolLane || '',
+      coachName: att.coachName || currentCoach.name,
+      notes: att.notes || '',
+    });
+  };
+
+  const handleUpdateAttendanceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAttendance) return;
+
+    if (editAttendanceData.dateStr !== editingAttendance.dateStr) {
+      const conflict = attendances.find(
+        (a) =>
+          a.id !== editingAttendance.id &&
+          a.studentId === editingAttendance.studentId &&
+          a.dateStr === editAttendanceData.dateStr
+      );
+      if (conflict) {
+        showCoachToast(
+          `Siswa sudah memiliki data presensi lain pada tanggal ${editAttendanceData.dateStr}!`,
+          'error'
+        );
+        return;
+      }
+    }
+
+    const updated: AttendanceRecord = {
+      ...editingAttendance,
+      dateStr: editAttendanceData.dateStr,
+      timeStr: editAttendanceData.timeStr,
+      status: editAttendanceData.status,
+      poolLane: editAttendanceData.poolLane,
+      coachName: editAttendanceData.coachName,
+      notes: editAttendanceData.notes,
+    };
+
+    onUpdateAttendance?.(updated);
+    setEditingAttendance(null);
+    showCoachToast(`Data absensi "${updated.studentName}" berhasil diperbarui!`, 'success');
+  };
+
+  const handleConfirmDeleteAttendance = () => {
+    if (!confirmDeleteAtt) return;
+    onDeleteAttendance?.(confirmDeleteAtt.id);
+    showCoachToast(`Catatan absensi "${confirmDeleteAtt.studentName}" (${confirmDeleteAtt.dateStr}) berhasil dihapus.`, 'info');
+    setConfirmDeleteAtt(null);
+  };
+
+  const handleOpenEditTotal = (st: Student) => {
+    const executed = getStudentExecutedAttendance(st);
+    const total = getStudentEffectiveQuota(st);
+    setEditingTotalStudent(st);
+    setEditTotalData({
+      executedSessions: executed,
+      totalQuota: total,
+      remainingQuota: Math.max(0, total - executed),
+    });
+  };
+
+  const handleSaveTotalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTotalStudent) return;
+    const total = Math.max(1, Number(editTotalData.totalQuota));
+    const exec = Math.max(0, Number(editTotalData.executedSessions));
+    const rem = Math.max(0, Number(editTotalData.remainingQuota));
+    onUpdateTotalAttendance?.(editingTotalStudent.id, exec, total, rem);
+    setEditingTotalStudent(null);
+    showCoachToast(`Total absen & kuota "${editingTotalStudent.name}" berhasil diperbarui!`, 'success');
+  };
+
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Hidden File Picker for Coach Avatar */}
@@ -249,11 +461,35 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
         className="hidden"
       />
 
-      {/* Upload success notification */}
+      {/* Upload success & CRUD notification */}
       {uploadNotice && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fadeIn">
           <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           <span>{uploadNotice}</span>
+        </div>
+      )}
+
+      {coachFeedback && (
+        <div
+          className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2 animate-fadeIn ${
+            coachFeedback.type === 'error'
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+              : coachFeedback.type === 'info'
+              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-700 dark:text-cyan-300'
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{coachFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCoachFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/10 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -286,6 +522,24 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
           <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-cyan-400/20 text-cyan-300 font-bold">
             {attendances.length}
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('notifications')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            currentActiveTab === 'notifications'
+              ? 'bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-md shadow-rose-600/20'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>Kirim Notif Absen Selesai</span>
+          {completedQuotaStudentsCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-amber-400 text-slate-950 font-black">
+              {completedQuotaStudentsCount} Selesai
+            </span>
+          )}
         </button>
 
         <button
@@ -426,6 +680,24 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
         />
       )}
 
+      {/* VIEW 1B: NOTIFICATIONS TAB (Kirim Pemberitahuan Absen Selesai & Tagihan) */}
+      {currentActiveTab === 'notifications' && (
+        <SessionNotificationManager
+          students={students}
+          attendances={attendances}
+          pricingPackages={pricingPackages}
+          notifications={notifications}
+          bankAccounts={bankAccounts}
+          academyProfile={academyProfile}
+          senderName={currentCoach.name}
+          senderRole="pelatih"
+          onSendNotification={(notif) => onSendNotification?.(notif)}
+          onDeleteNotification={(id) => onDeleteNotification?.(id)}
+          preselectedStudentId={preselectedNotifStudentId}
+          onClearPreselected={() => setPreselectedNotifStudentId(null)}
+        />
+      )}
+
       {/* VIEW 2: ATTENDANCE TAB (Total Absen di Menu Pelatih) */}
       {currentActiveTab === 'attendance' && (
         <div className="space-y-6 animate-fadeIn">
@@ -441,13 +713,34 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                     Rekap Absen &amp; Total Absen Siswa
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Pantau kehadiran, total pertemuan yang telah diikuti, dan sisa sesi paket renang murid secara akurat.
+                    Pantau kehadiran, input manual, edit, atau hapus absensi siswa tepi kolam secara langsung.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewAttendanceData((prev) => ({
+                    ...prev,
+                    studentId: students[0]?.id || '',
+                    dateStr: todayStr,
+                    timeStr:
+                      new Date().toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      }) + ' WIB',
+                  }));
+                  setShowAddAttendanceModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Input Absen Manual</span>
+              </button>
               <button
                 type="button"
                 onClick={onOpenScanner}
@@ -832,15 +1125,64 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                           </td>
 
                           {/* Actions */}
-                          <td className="px-4 py-4 text-center">
-                            <button
-                              type="button"
-                              onClick={() => onViewBarcode(st)}
-                              title="Lihat & Cetak Kartu Barcode Siswa"
-                              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 border border-slate-200 dark:border-slate-700 text-cyan-600 dark:text-cyan-400 transition-all cursor-pointer"
-                            >
-                              <QrCode className="w-4 h-4" />
-                            </button>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setViewingHistoryStudent(st)}
+                                title="Lihat Riwayat & Edit / Hapus Absensi Siswa"
+                                className="px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                              >
+                                <History className="w-3.5 h-3.5" />
+                                <span>Riwayat</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditTotal(st)}
+                                title="Edit Total Absen & Kuota Sesi Siswa"
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>Edit Total</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewAttendanceData((prev) => ({
+                                    ...prev,
+                                    studentId: st.id,
+                                    dateStr: todayStr,
+                                  }));
+                                  setShowAddAttendanceModal(true);
+                                }}
+                                title="Tambah Absensi Manual untuk Siswa Ini"
+                                className="px-2.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] cursor-pointer"
+                              >
+                                + Absen
+                              </button>
+                              {isFinished && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPreselectedNotifStudentId(st.id);
+                                    setActiveTab('notifications');
+                                  }}
+                                  title="Kirim Pemberitahuan Absen Selesai & Waktunya Bayar"
+                                  className="px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Bell className="w-3 h-3" />
+                                  <span>Notif</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => onViewBarcode(st)}
+                                title="Lihat & Cetak Kartu Barcode Siswa"
+                                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 border border-slate-200 dark:border-slate-700 text-cyan-600 dark:text-cyan-400 transition-all cursor-pointer"
+                              >
+                                <QrCode className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -868,15 +1210,34 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
           {/* CONTENT SUB-TAB 2: RIWAYAT LOG PRESENSI MASUK KOLAM */}
           {attendanceSubTab === 'logs' && (
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Clock className="w-4 h-4 text-cyan-500" />
-                    Riwayat Log Presensi Tepi Kolam
+                    Riwayat Log Presensi Tepi Kolam (Edit &amp; Hapus)
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Catatan pemindaian barcode siswa saat tiba di kolam renang
+                    Kelola catatan presensi siswa di kolam — pelatih dapat mengedit atau menghapus absensi jika terjadi kesalahan
                   </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={logDateFilter}
+                    onChange={(e) => setLogDateFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                    title="Filter Tanggal"
+                  />
+                  {logDateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setLogDateFilter('')}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                    >
+                      Reset Tgl
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -890,15 +1251,24 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                       <th className="px-4 py-4">Jalur Kolam</th>
                       <th className="px-4 py-4 text-center">Status</th>
                       <th className="px-4 py-4">Pelatih Bertugas</th>
+                      <th className="px-4 py-4 text-center">Aksi Edit / Hapus</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                     {attendances
                       .filter((att) => {
-                        return (
+                        const matchSearch =
                           att.studentName.toLowerCase().includes(attendanceSearch.toLowerCase()) ||
-                          att.dateStr.includes(attendanceSearch)
-                        );
+                          att.dateStr.includes(attendanceSearch);
+                        const matchRole =
+                          selectedRoleFilter === 'all' || att.roleClass === selectedRoleFilter;
+                        const matchDate = !logDateFilter || att.dateStr === logDateFilter;
+                        const matchScope =
+                          coachScopeFilter === 'all' ||
+                          students.some(
+                            (s) => s.id === att.studentId && s.assignedCoachId === currentCoach.id
+                          );
+                        return matchSearch && matchRole && matchDate && matchScope;
                       })
                       .map((att) => {
                         const isToday = att.dateStr === todayStr;
@@ -946,14 +1316,45 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                             </td>
 
                             <td className="px-4 py-3.5 text-center">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/20">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] border capitalize ${
+                                  att.status === 'hadir' || !att.status
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                    : att.status === 'izin'
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                }`}
+                              >
                                 <CheckCircle2 className="w-3 h-3" />
-                                Hadir
+                                {att.status || 'hadir'}
                               </span>
                             </td>
 
                             <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300 font-semibold text-xs">
                               {att.coachName}
+                            </td>
+
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditAttendance(att)}
+                                  title="Edit Absen Ini"
+                                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteAtt(att)}
+                                  title="Hapus Absen Ini"
+                                  className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Hapus</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -961,13 +1362,13 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
 
                     {attendances.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <td colSpan={7} className="py-12 text-center text-slate-400">
                           <Clock className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
                           <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">
                             Belum ada catatan presensi
                           </p>
                           <p className="text-xs text-slate-400 mt-1">
-                            Gunakan tombol Scanner Barcode untuk mencatat kehadiran siswa di kolam.
+                            Gunakan tombol Scanner Barcode atau Input Absen Manual untuk mencatat kehadiran siswa di kolam.
                           </p>
                         </td>
                       </tr>
@@ -1146,11 +1547,29 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                           {att.roleClass.replace('_', ' ')} • {att.poolLane}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <span className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          {att.timeStr}
-                        </span>
-                        <p className="text-[10px] text-slate-400 font-mono">{att.dateStr}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <span className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            {att.timeStr}
+                          </span>
+                          <p className="text-[10px] text-slate-400 font-mono">{att.dateStr}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditAttendance(att)}
+                          title="Edit Absen"
+                          className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 cursor-pointer"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteAtt(att)}
+                          title="Hapus Absen"
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -1384,6 +1803,484 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                   <p className="text-[10px] text-slate-400 mt-2 font-mono">{log.date}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 1: INPUT ABSEN MANUAL OLEH PELATIH                 */}
+      {/* ======================================================== */}
+      {showAddAttendanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-cyan-500" />
+                Input Absen Manual Pelatih
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddAttendanceModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddManualAttendanceSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Pilih Siswa</label>
+                <select
+                  required
+                  value={newAttendanceData.studentId}
+                  onChange={(e) => setNewAttendanceData({ ...newAttendanceData, studentId: e.target.value })}
+                  className="w-full mt-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-semibold"
+                >
+                  {students.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name} ({st.barcode} • Sisa {getStudentRemainingQuota(st)}/{getStudentEffectiveQuota(st)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Tanggal</label>
+                  <input
+                    type="date"
+                    required
+                    value={newAttendanceData.dateStr}
+                    onChange={(e) => setNewAttendanceData({ ...newAttendanceData, dateStr: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Jam Masuk</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAttendanceData.timeStr}
+                    onChange={(e) => setNewAttendanceData({ ...newAttendanceData, timeStr: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Status</label>
+                  <select
+                    value={newAttendanceData.status}
+                    onChange={(e: any) => setNewAttendanceData({ ...newAttendanceData, status: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-bold"
+                  >
+                    <option value="hadir">Hadir (Potong 1 Sesi)</option>
+                    <option value="izin">Izin</option>
+                    <option value="alpa">Alpa</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Jalur Kolam</label>
+                  <input
+                    type="text"
+                    value={newAttendanceData.poolLane}
+                    onChange={(e) => setNewAttendanceData({ ...newAttendanceData, poolLane: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Catatan</label>
+                <input
+                  type="text"
+                  value={newAttendanceData.notes}
+                  onChange={(e) => setNewAttendanceData({ ...newAttendanceData, notes: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAttendanceModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                >
+                  Simpan Absen
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: EDIT DATA ABSENSI OLEH PELATIH                   */}
+      {/* ======================================================== */}
+      {editingAttendance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Edit className="w-4 h-4 text-amber-500" />
+                  Edit Absensi Siswa
+                </h3>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  {editingAttendance.studentName} ({editingAttendance.studentId})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAttendance(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateAttendanceSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Tanggal Absen</label>
+                  <input
+                    type="date"
+                    required
+                    value={editAttendanceData.dateStr}
+                    onChange={(e) => setEditAttendanceData({ ...editAttendanceData, dateStr: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Jam Masuk</label>
+                  <input
+                    type="text"
+                    required
+                    value={editAttendanceData.timeStr}
+                    onChange={(e) => setEditAttendanceData({ ...editAttendanceData, timeStr: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Status Kehadiran</label>
+                  <select
+                    value={editAttendanceData.status}
+                    onChange={(e: any) => setEditAttendanceData({ ...editAttendanceData, status: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-bold"
+                  >
+                    <option value="hadir">Hadir</option>
+                    <option value="izin">Izin</option>
+                    <option value="alpa">Alpa</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Jalur Kolam</label>
+                  <input
+                    type="text"
+                    value={editAttendanceData.poolLane}
+                    onChange={(e) => setEditAttendanceData({ ...editAttendanceData, poolLane: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Pelatih Bertugas</label>
+                <input
+                  type="text"
+                  value={editAttendanceData.coachName}
+                  onChange={(e) => setEditAttendanceData({ ...editAttendanceData, coachName: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Catatan</label>
+                <input
+                  type="text"
+                  value={editAttendanceData.notes}
+                  onChange={(e) => setEditAttendanceData({ ...editAttendanceData, notes: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700"
+                />
+              </div>
+
+              <div className="flex justify-between items-center gap-2 pt-3 border-t dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = editingAttendance;
+                    setEditingAttendance(null);
+                    setConfirmDeleteAtt(target);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Absen</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAttendance(null)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-semibold cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 3: KONFIRMASI HAPUS ABSENSI                         */}
+      {/* ======================================================== */}
+      {confirmDeleteAtt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-rose-500/30 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  Hapus Catatan Absensi?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Anda yakin ingin menghapus absensi <strong>{confirmDeleteAtt.studentName}</strong> pada tanggal{' '}
+                  <strong className="font-mono">{confirmDeleteAtt.dateStr}</strong> ({confirmDeleteAtt.timeStr})? Kuota pertemuan siswa akan otomatis dikembalikan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAtt(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAttendance}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer"
+              >
+                Ya, Hapus Absen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 4: EDIT TOTAL ABSEN & KUOTA SISWA                   */}
+      {/* ======================================================== */}
+      {editingTotalStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  Edit Total Absen &amp; Kuota Siswa
+                </h3>
+                <p className="text-[11px] text-slate-500 font-mono">
+                  {editingTotalStudent.name} • {editingTotalStudent.barcode}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTotalStudent(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTotalSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Total Hadir</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editTotalData.executedSessions}
+                    onChange={(e) => {
+                      const exec = Number(e.target.value);
+                      setEditTotalData({
+                        ...editTotalData,
+                        executedSessions: exec,
+                        remainingQuota: Math.max(0, editTotalData.totalQuota - exec),
+                      });
+                    }}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-black text-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Total Kuota</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editTotalData.totalQuota}
+                    onChange={(e) => {
+                      const tot = Number(e.target.value);
+                      setEditTotalData({
+                        ...editTotalData,
+                        totalQuota: tot,
+                        remainingQuota: Math.max(0, tot - editTotalData.executedSessions),
+                      });
+                    }}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Sisa Sesi</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editTotalData.remainingQuota}
+                    onChange={(e) => {
+                      const rem = Number(e.target.value);
+                      setEditTotalData({
+                        ...editTotalData,
+                        remainingQuota: rem,
+                        executedSessions: Math.max(0, editTotalData.totalQuota - rem),
+                      });
+                    }}
+                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl dark:border-slate-700 font-black text-cyan-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onResetStudentAttendance?.(editingTotalStudent.id);
+                    setEditingTotalStudent(null);
+                    showCoachToast(`Semua riwayat absensi "${editingTotalStudent.name}" di-reset ke 0.`, 'info');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 font-bold cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Reset Semua Absen</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTotalStudent(null)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-semibold cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                  >
+                    Simpan Total
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 5: RIWAYAT ABSENSI SISWA (EDIT & HAPUS PER BARIS)   */}
+      {/* ======================================================== */}
+      {viewingHistoryStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <History className="w-5 h-5 text-blue-500" />
+                  Riwayat Absensi: {viewingHistoryStudent.name}
+                </h3>
+                <p className="text-xs text-slate-400 font-mono">
+                  {viewingHistoryStudent.barcode} • Terlaksana {getStudentExecutedAttendance(viewingHistoryStudent)} /{' '}
+                  {getStudentEffectiveQuota(viewingHistoryStudent)} Sesi
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingHistoryStudent(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+              {(() => {
+                const logs = attendances.filter((a) => a.studentId === viewingHistoryStudent.id);
+                if (logs.length === 0) {
+                  return (
+                    <div className="py-10 text-center text-slate-400 text-xs">
+                      Belum ada catatan log absensi untuk siswa ini.
+                    </div>
+                  );
+                }
+                return logs.map((att, idx) => (
+                  <div
+                    key={att.id}
+                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-cyan-600 dark:text-cyan-400">#{idx + 1}</span>
+                        <span className="font-mono font-bold text-slate-900 dark:text-white">{att.dateStr}</span>
+                        <span className="font-mono text-slate-500">{att.timeStr}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          {att.status || 'hadir'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {att.poolLane} • Pelatih: {att.coachName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditAttendance(att)}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteAtt(att)}
+                        className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         </div>

@@ -169,6 +169,35 @@
         "notes": { "type": "string" }
       },
       "required": ["id", "fullName", "phone", "status"]
+    },
+    "SessionNotification": {
+      "title": "SessionNotification",
+      "description": "Session completion and next payment billing notifications sent by admin or coaches to students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentBarcode": { "type": "string" },
+        "roleClass": { "type": "string" },
+        "parentName": { "type": "string" },
+        "phone": { "type": "string" },
+        "totalQuota": { "type": "number" },
+        "executedSessions": { "type": "number" },
+        "remainingQuota": { "type": "number" },
+        "attendanceDates": { "type": "array" },
+        "nextPackageName": { "type": "string" },
+        "nextSessionsCount": { "type": "number" },
+        "amountDue": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "message": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "status": { "type": "string" },
+        "readAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "studentName", "dueDate", "status"]
     }
   },
   "firestore": {
@@ -211,6 +240,10 @@
     "/galleryItems/{itemId}": {
       "schema": { "$ref": "#/entities/Student" },
       "description": "Club gallery photos and media"
+    },
+    "/sessionNotifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/SessionNotification" },
+      "description": "Notifications for completed attendance sessions and next payment schedules"
     }
   }
 }

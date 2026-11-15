@@ -12,6 +12,7 @@ import {
   StudentRegistration,
   GalleryItem,
   BankAccountInfo,
+  SessionCompletionNotification,
 } from './types';
 import {
   INITIAL_STUDENTS,
@@ -26,6 +27,7 @@ import {
   INITIAL_REGISTRATIONS,
   INITIAL_GALLERY_ITEMS,
   OFFICIAL_BANK_ACCOUNTS,
+  getEffectiveStudentQuota,
 } from './data/mockData';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
@@ -156,6 +158,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_PRICING_PACKAGES;
   });
 
+  const [sessionNotifications, setSessionNotifications] = useState<SessionCompletionNotification[]>(() => {
+    const saved = localStorage.getItem('AQUA_SESSION_NOTIFICATIONS');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Pre-login screen: 'profile' (Public Landing & Profile) or 'login' (Login Portal)
   const [preLoginView, setPreLoginView] = useState<'profile' | 'login'>('profile');
 
@@ -279,6 +286,8 @@ export default function App() {
     syncSaveAcademyProfile,
     syncSaveGalleryItem,
     syncDeleteGalleryItem,
+    syncSaveSessionNotification,
+    syncDeleteSessionNotification,
   } = useFirestoreSync({
     appUsers,
     setAppUsers,
@@ -300,6 +309,8 @@ export default function App() {
     setGalleryItems,
     academyProfile,
     setAcademyProfile,
+    sessionNotifications,
+    setSessionNotifications,
   });
 
   const handleDeleteBankAccount = (accId: string) => {
@@ -511,70 +522,91 @@ export default function App() {
 
   // Handle Attendance Scan Recorded
   const handleAttendanceRecorded = (record: AttendanceRecord, updatedStudent?: Student) => {
-    const updatedAttendances = [record, ...attendances];
-    setAttendances(updatedAttendances);
-    localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+    setAttendances((prev) => {
+      const updatedAttendances = [record, ...prev];
+      localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+      return updatedAttendances;
+    });
     syncSaveAttendance(record);
 
+    const isPresent = record.status === 'hadir' || !record.status;
+
     if (updatedStudent) {
-      const updatedStudents = students.map((s) =>
-        s.id === updatedStudent.id ? updatedStudent : s
-      );
-      setStudents(updatedStudents);
-      localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
-      syncSaveStudent(updatedStudent);
-    } else if (record.status === 'hadir' || !record.status) {
+      const syncedStudent: Student =
+        isPresent && typeof updatedStudent.manualExecutedSessions === 'number'
+          ? { ...updatedStudent, manualExecutedSessions: updatedStudent.manualExecutedSessions + 1 }
+          : updatedStudent;
+      setStudents((prev) => {
+        const updatedStudents = prev.map((s) => (s.id === syncedStudent.id ? syncedStudent : s));
+        localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+        return updatedStudents;
+      });
+      syncSaveStudent(syncedStudent);
+    } else if (isPresent) {
       // Input manual tanpa updatedStudent: kurangi kuota HANYA untuk siswa terkait
-      const target =
-        students.find((s) => s.id === record.studentId) ||
-        (record.studentBarcode
-          ? students.find(
-              (s) =>
-                s.barcode === record.studentBarcode &&
-                s.name.trim().toLowerCase() === record.studentName.trim().toLowerCase()
-            )
-          : undefined);
-      if (target) {
+      setStudents((prev) => {
+        const target =
+          prev.find((s) => s.id === record.studentId) ||
+          (record.studentBarcode
+            ? prev.find(
+                (s) =>
+                  s.barcode === record.studentBarcode &&
+                  s.name.trim().toLowerCase() === record.studentName.trim().toLowerCase()
+              )
+            : undefined);
+        if (!target) return prev;
         const newRemaining = Math.max(0, (target.remainingQuota ?? target.totalQuota) - 1);
-        if (newRemaining !== target.remainingQuota) {
-          const stUpdated = { ...target, remainingQuota: newRemaining };
-          const updatedStudents = students.map((s) => (s.id === target.id ? stUpdated : s));
-          setStudents(updatedStudents);
-          localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
-          syncSaveStudent(stUpdated);
-        }
-      }
+        const stUpdated: Student = {
+          ...target,
+          remainingQuota: newRemaining,
+          ...(typeof target.manualExecutedSessions === 'number'
+            ? { manualExecutedSessions: target.manualExecutedSessions + 1 }
+            : {}),
+        };
+        const updatedStudents = prev.map((s) => (s.id === target.id ? stUpdated : s));
+        localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+        syncSaveStudent(stUpdated);
+        return updatedStudents;
+      });
     }
   };
 
   // Update attendance record
   const handleUpdateAttendance = (updatedRecord: AttendanceRecord) => {
-    const prev = attendances.find((a) => a.id === updatedRecord.id);
-    const updatedAttendances = attendances.map((a) =>
-      a.id === updatedRecord.id ? updatedRecord : a
-    );
-    setAttendances(updatedAttendances);
-    localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+    const prevRecord = attendances.find((a) => a.id === updatedRecord.id);
+    setAttendances((prev) => {
+      const updatedAttendances = prev.map((a) =>
+        a.id === updatedRecord.id ? updatedRecord : a
+      );
+      localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+      return updatedAttendances;
+    });
     syncSaveAttendance(updatedRecord);
 
-    // If status changed from/to 'hadir', adjust student quota
-    if (prev && prev.status !== updatedRecord.status) {
-      const student = students.find((s) => s.id === updatedRecord.studentId);
-      if (student) {
+    // If status changed from/to 'hadir', adjust student quota & manualExecutedSessions
+    if (prevRecord && prevRecord.status !== updatedRecord.status) {
+      setStudents((prev) => {
+        const student = prev.find((s) => s.id === updatedRecord.studentId);
+        if (!student) return prev;
         let newRemaining = student.remainingQuota;
-        if (prev.status === 'hadir' && updatedRecord.status !== 'hadir') {
+        let nextManual = student.manualExecutedSessions;
+        if (prevRecord.status === 'hadir' && updatedRecord.status !== 'hadir') {
           newRemaining = Math.min(student.totalQuota, (student.remainingQuota ?? 0) + 1);
-        } else if (prev.status !== 'hadir' && updatedRecord.status === 'hadir') {
+          if (typeof nextManual === 'number') nextManual = Math.max(0, nextManual - 1);
+        } else if (prevRecord.status !== 'hadir' && updatedRecord.status === 'hadir') {
           newRemaining = Math.max(0, (student.remainingQuota ?? student.totalQuota) - 1);
+          if (typeof nextManual === 'number') nextManual = nextManual + 1;
         }
-        if (newRemaining !== student.remainingQuota) {
-          const updatedStudent = { ...student, remainingQuota: newRemaining };
-          const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
-          setStudents(updatedStudents);
-          localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
-          syncSaveStudent(updatedStudent);
-        }
-      }
+        const updatedStudent: Student = {
+          ...student,
+          remainingQuota: newRemaining,
+          ...(typeof nextManual === 'number' ? { manualExecutedSessions: nextManual } : {}),
+        };
+        const updatedStudents = prev.map((s) => (s.id === student.id ? updatedStudent : s));
+        localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
+        syncSaveStudent(updatedStudent);
+        return updatedStudents;
+      });
     }
   };
 
@@ -583,24 +615,30 @@ export default function App() {
     const recordToDelete = attendances.find((a) => a.id === attendanceId);
     if (!recordToDelete) return;
 
-    const updatedAttendances = attendances.filter((a) => a.id !== attendanceId);
-    setAttendances(updatedAttendances);
-    localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+    setAttendances((prev) => {
+      const updatedAttendances = prev.filter((a) => a.id !== attendanceId);
+      localStorage.setItem('AQUA_ATTENDANCES', JSON.stringify(updatedAttendances));
+      return updatedAttendances;
+    });
     syncDeleteAttendance(attendanceId);
 
-    // If deleted record was 'hadir', restore quota for student
-    if (recordToDelete.status === 'hadir') {
-      const student = students.find((s) => s.id === recordToDelete.studentId);
-      if (student) {
-        const updatedStudent = {
+    // If deleted record was 'hadir', restore quota for student & decrement manualExecutedSessions
+    if (recordToDelete.status === 'hadir' || !recordToDelete.status) {
+      setStudents((prev) => {
+        const student = prev.find((s) => s.id === recordToDelete.studentId);
+        if (!student) return prev;
+        const updatedStudent: Student = {
           ...student,
           remainingQuota: Math.min(student.totalQuota, (student.remainingQuota ?? 0) + 1),
+          ...(typeof student.manualExecutedSessions === 'number'
+            ? { manualExecutedSessions: Math.max(0, student.manualExecutedSessions - 1) }
+            : {}),
         };
-        const updatedStudents = students.map((s) => (s.id === student.id ? updatedStudent : s));
-        setStudents(updatedStudents);
+        const updatedStudents = prev.map((s) => (s.id === student.id ? updatedStudent : s));
         localStorage.setItem('AQUA_STUDENTS', JSON.stringify(updatedStudents));
         syncSaveStudent(updatedStudent);
-      }
+        return updatedStudents;
+      });
     }
   };
 
@@ -1106,12 +1144,70 @@ export default function App() {
     }
   };
 
+  // Session Completion Notification Handlers
+  const handleSendNotification = (notif: SessionCompletionNotification) => {
+    setSessionNotifications((prev) => {
+      const updated = [notif, ...prev];
+      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(updated));
+      return updated;
+    });
+    syncSaveSessionNotification(notif);
+  };
+
+  const handleMarkNotificationRead = (notifId: string) => {
+    let targetUpdated: SessionCompletionNotification | null = null;
+    setSessionNotifications((prev) => {
+      const updated = prev.map((n) => {
+        if (n.id === notifId && n.status === 'unread') {
+          targetUpdated = {
+            ...n,
+            status: 'read',
+            readAt: new Date().toISOString(),
+          };
+          return targetUpdated;
+        }
+        return n;
+      });
+      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(updated));
+      return updated;
+    });
+    if (targetUpdated) {
+      syncSaveSessionNotification(targetUpdated);
+    }
+  };
+
+  const handleDeleteNotification = (notifId: string) => {
+    setSessionNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== notifId);
+      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(updated));
+      return updated;
+    });
+    syncDeleteSessionNotification(notifId);
+  };
+
   // Add new payment
   const handleAddPayment = (newPayment: PaymentRecord) => {
     const updated = [newPayment, ...payments];
     setPayments(updated);
     localStorage.setItem('AQUA_PAYMENTS', JSON.stringify(updated));
     syncSavePayment(newPayment);
+
+    if (newPayment.status === 'lunas') {
+      const changedNotifs: SessionCompletionNotification[] = [];
+      setSessionNotifications((prev) => {
+        const next = prev.map((n) => {
+          if (n.studentId === newPayment.studentId && n.status !== 'paid') {
+            const updatedN: SessionCompletionNotification = { ...n, status: 'paid' };
+            changedNotifs.push(updatedN);
+            return updatedN;
+          }
+          return n;
+        });
+        localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
+        return next;
+      });
+      changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+    }
   };
 
   // Update payment status (e.g. mark lunas)
@@ -1159,6 +1255,21 @@ export default function App() {
     if (pVer) syncSavePayment(pVer);
     const sVer = updatedStudents.find(s => s.id === payment.studentId);
     if (sVer) syncSaveStudent(sVer);
+
+    const changedNotifs: SessionCompletionNotification[] = [];
+    setSessionNotifications((prev) => {
+      const next = prev.map((n) => {
+        if (n.studentId === payment.studentId && n.status !== 'paid') {
+          const updatedN: SessionCompletionNotification = { ...n, status: 'paid' };
+          changedNotifs.push(updatedN);
+          return updatedN;
+        }
+        return n;
+      });
+      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
+      return next;
+    });
+    changedNotifs.forEach((n) => syncSaveSessionNotification(n));
   };
 
   // Update payment details
@@ -1826,6 +1937,9 @@ export default function App() {
             onAddBankAccount={handleAddBankAccount}
             onUpdateBankAccount={handleUpdateBankAccount}
             onDeleteBankAccount={handleDeleteBankAccount}
+            notifications={sessionNotifications}
+            onSendNotification={handleSendNotification}
+            onDeleteNotification={handleDeleteNotification}
           />
         );
 
@@ -1846,6 +1960,16 @@ export default function App() {
             onViewCoachBarcode={(cch) => setBarcodeCardModal(cch)}
             onUpdateCoachAvatar={handleUpdateCoachAvatar}
             onUpdateCoach={handleUpdateCoach}
+            onAddAttendance={(rec) => handleAttendanceRecorded(rec)}
+            onUpdateAttendance={handleUpdateAttendance}
+            onDeleteAttendance={handleDeleteAttendance}
+            onUpdateTotalAttendance={handleUpdateTotalAttendance}
+            onResetStudentAttendance={handleResetStudentAttendance}
+            notifications={sessionNotifications}
+            onSendNotification={handleSendNotification}
+            onDeleteNotification={handleDeleteNotification}
+            bankAccounts={bankAccounts}
+            academyProfile={academyProfile}
           />
         );
 
@@ -1872,6 +1996,8 @@ export default function App() {
             onUpdateStudent={handleUpdateStudent}
             onUpdateAvatar={handleUpdateAvatar}
             onUploadPaymentProof={handleAddPayment}
+            notifications={sessionNotifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
           />
         );
     }
@@ -1898,6 +2024,34 @@ export default function App() {
         onLogout={handleLogout}
         academyProfile={academyProfile}
         onUpdateAcademyProfile={handleUpdateAcademyProfile}
+        finishedStudentsCount={
+          students.filter((s) => {
+            const total = getEffectiveStudentQuota(s, pricingPackages);
+            const logsCount = attendances.filter(
+              (a) =>
+                (a.studentId === s.id ||
+                  (s.barcode && a.studentBarcode === s.barcode) ||
+                  a.studentName.trim().toLowerCase() === s.name.trim().toLowerCase()) &&
+                (a.status === 'hadir' || !a.status)
+            ).length;
+            const exec =
+              typeof s.manualExecutedSessions === 'number'
+                ? Math.max(logsCount, s.manualExecutedSessions)
+                : logsCount;
+            return Math.max(0, total - exec) <= 0 || (s.remainingQuota !== undefined && s.remainingQuota <= 0);
+          }).length
+        }
+        pendingNotificationsCount={
+          currentStudent
+            ? sessionNotifications.filter(
+                (n) =>
+                  (n.studentId === currentStudent.id ||
+                    (currentStudent.barcode && n.studentBarcode === currentStudent.barcode) ||
+                    n.studentName.trim().toLowerCase() === currentStudent.name.trim().toLowerCase()) &&
+                  n.status === 'unread'
+              ).length
+            : 0
+        }
         pendingRegistrationsCount={
           registrations.filter(
             (r) =>

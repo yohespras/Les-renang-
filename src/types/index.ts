@@ -220,3 +220,34 @@ export interface BankAccountInfo {
   notes?: string;
 }
 
+export interface NotificationAttendanceDateItem {
+  dateStr: string;
+  timeStr: string;
+  poolLane?: string;
+  coachName?: string;
+  status?: string;
+}
+
+export interface SessionCompletionNotification {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentBarcode?: string;
+  roleClass: UserRole;
+  parentName?: string;
+  phone?: string;
+  totalQuota: number;
+  executedSessions: number;
+  remainingQuota: number;
+  attendanceDates: NotificationAttendanceDateItem[];
+  nextPackageName: string;
+  nextSessionsCount: number;
+  amountDue: number;
+  dueDate: string; // YYYY-MM-DD (Waktunya membayar kembali untuk pertemuan berikutnya)
+  message: string;
+  senderName: string;
+  senderRole: 'admin' | 'pelatih';
+  sentAt: string;
+  status: 'unread' | 'read' | 'paid';
+  readAt?: string;
+}

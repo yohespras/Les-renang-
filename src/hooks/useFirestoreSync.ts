@@ -10,6 +10,7 @@ import {
   StudentRegistration,
   ClassPricingPackage,
   GalleryItem,
+  SessionCompletionNotification,
 } from '../types';
 import {
   subscribeUsers,
@@ -41,6 +42,9 @@ import {
   subscribeGalleryItems,
   saveGalleryItemToFirestore,
   deleteGalleryItemFromFirestore,
+  subscribeSessionNotifications,
+  saveSessionNotificationToFirestore,
+  deleteSessionNotificationFromFirestore,
   syncInitialLocalDataToFirestore,
 } from '../services/firestoreSync';
 
@@ -65,6 +69,8 @@ interface UseFirestoreSyncProps {
   setGalleryItems: React.Dispatch<React.SetStateAction<GalleryItem[]>>;
   academyProfile: AcademyProfile;
   setAcademyProfile: React.Dispatch<React.SetStateAction<AcademyProfile>>;
+  sessionNotifications: SessionCompletionNotification[];
+  setSessionNotifications: React.Dispatch<React.SetStateAction<SessionCompletionNotification[]>>;
 }
 
 export function useFirestoreSync({
@@ -88,6 +94,8 @@ export function useFirestoreSync({
   setGalleryItems,
   academyProfile,
   setAcademyProfile,
+  sessionNotifications,
+  setSessionNotifications,
 }: UseFirestoreSyncProps) {
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
   const [syncCount, setSyncCount] = useState<number>(0);
@@ -204,6 +212,13 @@ export function useFirestoreSync({
       setSyncCount((prev) => prev + 1);
     });
 
+    const unsubSessionNotifications = subscribeSessionNotifications((remoteNotifications) => {
+      setSessionNotifications(remoteNotifications);
+      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(remoteNotifications));
+      setIsCloudSynced(true);
+      setSyncCount((prev) => prev + 1);
+    });
+
     return () => {
       unsubUsers();
       unsubStudents();
@@ -215,6 +230,7 @@ export function useFirestoreSync({
       unsubRegs();
       unsubPricing();
       unsubGallery();
+      unsubSessionNotifications();
     };
   }, [
     setAppUsers,
@@ -227,6 +243,7 @@ export function useFirestoreSync({
     setRegistrations,
     setPricingPackages,
     setGalleryItems,
+    setSessionNotifications,
   ]);
 
   const syncSaveUser = (user: AuthUser) => saveUserToFirestore(user).catch(console.error);
@@ -258,6 +275,11 @@ export function useFirestoreSync({
   const syncSaveGalleryItem = (item: GalleryItem) => saveGalleryItemToFirestore(item).catch(console.error);
   const syncDeleteGalleryItem = (id: string) => deleteGalleryItemFromFirestore(id).catch(console.error);
 
+  const syncSaveSessionNotification = (notif: SessionCompletionNotification) =>
+    saveSessionNotificationToFirestore(notif).catch(console.error);
+  const syncDeleteSessionNotification = (id: string) =>
+    deleteSessionNotificationFromFirestore(id).catch(console.error);
+
   return {
     isCloudSynced,
     syncCount,
@@ -280,5 +302,7 @@ export function useFirestoreSync({
     syncSaveAcademyProfile,
     syncSaveGalleryItem,
     syncDeleteGalleryItem,
+    syncSaveSessionNotification,
+    syncDeleteSessionNotification,
   };
 }

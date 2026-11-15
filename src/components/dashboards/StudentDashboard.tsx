@@ -8,6 +8,7 @@ import {
   ClassPricingPackage,
   AcademyProfile,
   BankAccountInfo,
+  SessionCompletionNotification,
 } from '../../types';
 import { ROLE_LABELS, OFFICIAL_BANK_ACCOUNTS, INITIAL_PRICING_PACKAGES, getEffectiveStudentQuota } from '../../data/mockData';
 import { BarcodeCard } from '../BarcodeCard';
@@ -44,6 +45,7 @@ import {
   Receipt,
   Building2,
   ArrowRight,
+  Bell,
 } from 'lucide-react';
 import { compressAndResizeImage } from '../../services/imageUtils';
 import { maskPhone, maskParentName, maskBirthDate } from '../../services/privacyUtils';
@@ -62,6 +64,8 @@ interface StudentDashboardProps {
   onUpdateStudent?: (student: Student) => void;
   onUpdateAvatar?: (newAvatarUrl: string) => void;
   onUploadPaymentProof?: (newPayment: PaymentRecord) => void;
+  notifications?: SessionCompletionNotification[];
+  onMarkNotificationRead?: (notifId: string) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -78,6 +82,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onUpdateStudent,
   onUpdateAvatar,
   onUploadPaymentProof,
+  notifications = [],
+  onMarkNotificationRead,
 }) => {
   if (!student) {
     return (
@@ -342,6 +348,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
   );
 
+  // Pemberitahuan absen selesai & tagihan pertemuan berikutnya khusus siswa ini
+  const studentNotifications = [...notifications]
+    .filter(
+      (n) =>
+        n.studentId === student.id ||
+        (student.barcode && n.studentBarcode && n.studentBarcode === student.barcode) ||
+        n.studentName.trim().toLowerCase() === student.name.trim().toLowerCase()
+    )
+    .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+
+  const unreadStudentNotifications = studentNotifications.filter((n) => n.status === 'unread');
+  const latestUnreadNotification = unreadStudentNotifications[0];
+
+  const handlePayFromNotification = (notif: SessionCompletionNotification) => {
+    const matchedPkg =
+      effectivePackages.find(
+        (p) =>
+          p.packageName.trim().toLowerCase() === notif.nextPackageName.trim().toLowerCase() ||
+          p.sessionsCount === notif.nextSessionsCount
+      ) || studentPackage;
+    if (matchedPkg) {
+      setSelectedPackageId(matchedPkg.id);
+    }
+    if (notif.status === 'unread' && onMarkNotificationRead) {
+      onMarkNotificationRead(notif.id);
+    }
+    setShowPaymentModal(true);
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Hidden file input */}
@@ -474,6 +509,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <CreditCard className="w-4 h-4" />
               <span>Riwayat Bayar</span>
             </button>
+            <button
+              onClick={() => onTabChange('notifications')}
+              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'notifications'
+                  ? 'bg-white text-slate-900 shadow-lg'
+                  : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+              }`}
+            >
+              <Bell className="w-4 h-4" />
+              <span>Pemberitahuan</span>
+              {unreadStudentNotifications.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black leading-none shadow-sm">
+                  {unreadStudentNotifications.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -534,6 +585,109 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   <span>Lihat Bukti Transfer</span>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================================= */}
+      {/* PEMBERITAHUAN ABSEN SELESAI & JADWAL PEMBAYARAN DARI ADMIN / PELATIH    */}
+      {/* ======================================================================= */}
+      {latestUnreadNotification && activeTab !== 'notifications' && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 dark:from-cyan-950/40 dark:via-blue-950/30 dark:to-indigo-950/30 border-2 border-cyan-500/40 shadow-lg shadow-cyan-500/10 animate-fadeIn space-y-4">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-cyan-600/30">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black uppercase tracking-wider">
+                    Pemberitahuan Baru
+                  </span>
+                  <span className="text-[11px] font-bold text-cyan-700 dark:text-cyan-300">
+                    Dari {latestUnreadNotification.senderName} ({latestUnreadNotification.senderRole === 'admin' ? 'Admin' : 'Pelatih'})
+                  </span>
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
+                  Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali
+                </h3>
+                <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-line leading-relaxed">
+                  {latestUnreadNotification.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {onMarkNotificationRead && (
+                <button
+                  type="button"
+                  onClick={() => onMarkNotificationRead(latestUnreadNotification.id)}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Tandai Dibaca
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onTabChange('notifications')}
+                className="px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Detail ({studentNotifications.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePayFromNotification(latestUnreadNotification)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Bayar Sekarang</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-3 border-t border-cyan-200/70 dark:border-cyan-800/60">
+            {/* Tanggal-tanggal Absen */}
+            <div className="lg:col-span-2">
+              <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-2">
+                <Calendar className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                Tanggal-Tanggal Absen Pertemuan ({latestUnreadNotification.executedSessions} / {latestUnreadNotification.totalQuota} Sesi):
+              </span>
+              {latestUnreadNotification.attendanceDates && latestUnreadNotification.attendanceDates.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {latestUnreadNotification.attendanceDates.map((d, idx) => (
+                    <span
+                      key={`${d.dateStr}-${d.timeStr}-${idx}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-cyan-200 dark:border-cyan-800/70 text-[11px] font-mono text-slate-800 dark:text-slate-200 shadow-xs"
+                    >
+                      <span className="font-black text-cyan-600 dark:text-cyan-400">#{idx + 1}</span>
+                      <span className="font-bold">{d.dateStr}</span>
+                      <span className="text-slate-400">({d.timeStr})</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 italic">
+                  Total {latestUnreadNotification.executedSessions} pertemuan selesai tercatat.
+                </p>
+              )}
+            </div>
+
+            {/* Waktunya Pembayaran Berikutnya */}
+            <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-amber-300/70 dark:border-amber-700/60 space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Waktunya Membayar Kembali
+              </span>
+              <p className="text-xs font-extrabold text-slate-900 dark:text-white">
+                {latestUnreadNotification.nextPackageName} (+{latestUnreadNotification.nextSessionsCount} Sesi)
+              </p>
+              <p className="text-sm font-black text-cyan-600 dark:text-cyan-400">
+                Rp {latestUnreadNotification.amountDue.toLocaleString('id-ID')}
+              </p>
+              <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                Jatuh Tempo: <span className="font-mono font-bold">{latestUnreadNotification.dueDate}</span>
+              </p>
             </div>
           </div>
         </div>
@@ -1489,6 +1643,257 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <div className="max-w-md w-full">
               <BarcodeCard student={student} standalone={true} academyProfile={academyProfile} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================================= */}
+      {/* TAB 6: PEMBERITAHUAN ABSEN SELESAI & JADWAL PEMBAYARAN BERIKUTNYA       */}
+      {/* ======================================================================= */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-6">
+          <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-cyan-500" />
+                  Pemberitahuan Absen Selesai &amp; Tagihan Berikutnya
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Daftar informasi resmi dari Admin atau Pelatih mengenai rekap tanggal absensi yang telah selesai serta jadwal pembayaran pertemuan berikutnya.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 text-xs font-bold">
+                  {studentNotifications.length} Pemberitahuan
+                </span>
+                {unreadStudentNotifications.length > 0 && (
+                  <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                    {unreadStudentNotifications.length} Belum Dibaca
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {studentNotifications.length === 0 ? (
+              <div className="text-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                  <Bell className="w-7 h-7" />
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
+                  Belum Ada Pemberitahuan Absen Selesai
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Saat kuota pertemuan Anda telah selesai atau mendekati habis, Admin atau Pelatih akan mengirimkan pemberitahuan beserta daftar tanggal absensi dan jadwal pembayaran paket berikutnya ke halaman ini.
+                </p>
+                <div className="pt-2 flex flex-wrap justify-center gap-2">
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Sisa Kuota Saat Ini: {remainingQuota} / {totalQuota} Sesi
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentModal(true)}
+                    className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Bukti Transfer Perpanjangan</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {studentNotifications.map((notif) => {
+                  const isUnread = notif.status === 'unread';
+                  const isPaid = notif.status === 'paid';
+                  const sentDateDisplay = notif.sentAt
+                    ? new Date(notif.sentAt).toLocaleString('id-ID', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '-';
+
+                  return (
+                    <div
+                      key={notif.id}
+                      className={`p-5 sm:p-6 rounded-3xl border-2 transition-all space-y-4 ${
+                        isPaid
+                          ? 'bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-500/30'
+                          : isUnread
+                          ? 'bg-cyan-50/60 dark:bg-cyan-950/25 border-cyan-500/50 shadow-md shadow-cyan-500/5'
+                          : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isPaid ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Sudah Dibayar (Lunas)
+                              </span>
+                            ) : isUnread ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black uppercase tracking-wider">
+                                Baru • Belum Dibaca
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold uppercase tracking-wider">
+                                Sudah Dibaca
+                              </span>
+                            )}
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              Dikirim {sentDateDisplay} oleh{' '}
+                              <strong className="text-slate-700 dark:text-slate-200">
+                                {notif.senderName}
+                              </strong>{' '}
+                              ({notif.senderRole === 'admin' ? 'Admin' : 'Pelatih'})
+                            </span>
+                          </div>
+                          <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                            Pemberitahuan Penyelesaian {notif.executedSessions} / {notif.totalQuota} Pertemuan
+                          </h3>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          {isUnread && onMarkNotificationRead && (
+                            <button
+                              type="button"
+                              onClick={() => onMarkNotificationRead(notif.id)}
+                              className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              Tandai Sudah Dibaca
+                            </button>
+                          )}
+                          {!isPaid && (
+                            <button
+                              type="button"
+                              onClick={() => handlePayFromNotification(notif)}
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Bayar &amp; Upload Bukti Transfer</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Isi Pesan */}
+                      <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                        {notif.message}
+                      </div>
+
+                      {/* Grid Tanggal Absen & Jadwal Pembayaran Berikutnya */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="lg:col-span-2 p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 mb-3">
+                            <CalendarCheck className="w-4 h-4 text-emerald-500" />
+                            Daftar Tanggal &amp; Waktu Absen yang Telah Selesai ({notif.attendanceDates?.length || 0} Rekaman):
+                          </span>
+                          {notif.attendanceDates && notif.attendanceDates.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {notif.attendanceDates.map((d, idx) => (
+                                <div
+                                  key={`${d.dateStr}-${d.timeStr}-${idx}`}
+                                  className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between text-[11px]"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-lg bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-black flex items-center justify-center text-[10px]">
+                                      {idx + 1}
+                                    </span>
+                                    <div>
+                                      <p className="font-mono font-bold text-slate-900 dark:text-white">
+                                        {d.dateStr}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 truncate max-w-[160px]">
+                                        {d.poolLane || 'Kolam Utama'} • {d.coachName || 'Pelatih'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                                    {d.timeStr}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500 italic">
+                              Total {notif.executedSessions} dari {notif.totalQuota} sesi latihan telah diselesaikan.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-300/70 dark:border-amber-800/60 flex flex-col justify-between space-y-3">
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              Waktunya Membayar Kembali
+                            </span>
+                            <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+                              {notif.nextPackageName}
+                            </p>
+                            <p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
+                              Kuota Tambahan: +{notif.nextSessionsCount} Pertemuan
+                            </p>
+                            <p className="text-xl font-black text-slate-900 dark:text-white pt-1">
+                              Rp {notif.amountDue.toLocaleString('id-ID')}
+                            </p>
+                            <div className="pt-1">
+                              <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 block">
+                                Jatuh Tempo Pembayaran:
+                              </span>
+                              <span className="font-mono text-xs font-black text-rose-700 dark:text-rose-300">
+                                {notif.dueDate}
+                              </span>
+                            </div>
+                          </div>
+
+                          {!isPaid && activeBankAccounts.length > 0 && (
+                            <div className="pt-3 border-t border-amber-200/80 dark:border-amber-800/50 space-y-1.5">
+                              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block">
+                                Rekening Transfer Resmi:
+                              </span>
+                              {activeBankAccounts.slice(0, 2).map((bank) => (
+                                <div
+                                  key={bank.bankCode}
+                                  className="flex items-center justify-between text-[11px] bg-white/80 dark:bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-amber-200/60 dark:border-slate-700"
+                                >
+                                  <div>
+                                    <span className="font-bold text-slate-900 dark:text-white">
+                                      {bank.bankName}
+                                    </span>{' '}
+                                    <span className="font-mono text-slate-600 dark:text-slate-300">
+                                      {bank.accountNumber}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyAccount(bank.accountNumber, `${notif.id}-${bank.bankCode}`)}
+                                    className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                  >
+                                    {copiedBankText === `${notif.id}-${bank.bankCode}` ? (
+                                      <>
+                                        <Check className="w-3 h-3 text-emerald-500" />
+                                        <span className="text-emerald-600">Tersalin</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3 h-3" />
+                                        <span>Salin</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

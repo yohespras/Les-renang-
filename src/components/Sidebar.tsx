@@ -40,6 +40,7 @@ import {
   UserPlus,
   Edit3,
   Save,
+  Bell,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -60,6 +61,8 @@ interface SidebarProps {
   currentUser: AuthUser | null;
   onLogout: () => void;
   pendingRegistrationsCount?: number;
+  pendingNotificationsCount?: number;
+  finishedStudentsCount?: number;
   academyProfile?: AcademyProfile;
   onUpdateAcademyProfile?: (profile: AcademyProfile) => void;
 }
@@ -81,6 +84,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   onLogout,
   pendingRegistrationsCount = 0,
+  pendingNotificationsCount = 0,
+  finishedStudentsCount = 0,
   academyProfile,
   onUpdateAcademyProfile,
 }) => {
@@ -159,6 +164,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: CalendarCheck,
           },
           {
+            id: 'notifications',
+            label: 'Kirim Notif Absen Selesai',
+            desc: 'Tgl hadir & tagihan pertemuan berikutnya',
+            icon: Bell,
+            badge: finishedStudentsCount > 0 ? `${finishedStudentsCount} Selesai` : undefined,
+          },
+          {
             id: 'payments',
             label: 'Pembayaran & Kasir SPP',
             desc: 'Rekening bank transfer (BRI), invoice & bukti',
@@ -225,8 +237,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             id: 'attendance',
             label: 'Absen & Total Absen',
-            desc: 'Rekap kehadiran, total pertemuan & sisa sesi',
+            desc: 'Rekap kehadiran, edit/hapus & sisa sesi',
             icon: CalendarCheck,
+          },
+          {
+            id: 'notifications',
+            label: 'Kirim Notif Absen Selesai',
+            desc: 'Tgl hadir & waktunya bayar lagi',
+            icon: Bell,
+            badge: finishedStudentsCount > 0 ? `${finishedStudentsCount} Selesai` : undefined,
           },
           {
             id: 'profile',
@@ -280,6 +299,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: 'Riwayat Masuk',
             desc: 'Rekap presensi masuk kolam',
             icon: CalendarCheck,
+          },
+          {
+            id: 'notifications',
+            label: 'Pemberitahuan & Tagihan',
+            desc: 'Tgl absen selesai & jadwal bayar',
+            icon: Bell,
+            badge: pendingNotificationsCount > 0 ? `${pendingNotificationsCount} Baru` : undefined,
           },
           {
             id: 'payments',

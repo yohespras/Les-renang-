@@ -43,6 +43,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /sessionNotifications/{notificationId} {
+      allow read, write: if true;
+    }
+
     // Default catch-all for any other path
     match /{document=**} {
       allow read, write: if false;

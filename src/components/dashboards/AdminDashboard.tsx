@@ -12,6 +12,7 @@ import {
   StudentRegistration,
   GalleryItem,
   BankAccountInfo,
+  SessionCompletionNotification,
 } from '../../types';
 import { Coach } from '../../types';
 import {
@@ -35,6 +36,7 @@ import {
 } from '../../data/mockData';
 import { AdminProfileSettings } from './AdminProfileSettings';
 import { AdminPersonalProfile } from './AdminPersonalProfile';
+import { SessionNotificationManager } from '../SessionNotificationManager';
 import {
   Users,
   CalendarCheck,
@@ -87,6 +89,7 @@ import {
   UserPlus,
   User,
   Copy,
+  Bell,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -140,6 +143,9 @@ interface AdminDashboardProps {
   onAddBankAccount?: (newAcc: BankAccountInfo) => void;
   onUpdateBankAccount?: (updatedAcc: BankAccountInfo) => void;
   onDeleteBankAccount?: (accId: string) => void;
+  notifications?: SessionCompletionNotification[];
+  onSendNotification?: (notif: SessionCompletionNotification) => void;
+  onDeleteNotification?: (id: string) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -193,15 +199,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteGalleryItem = () => {},
   currentUser = null,
   onUpdateAvatar = () => {},
+  notifications = [],
+  onSendNotification = () => {},
+  onDeleteNotification = () => {},
 }) => {
   // Sub-tabs in Admin Dashboard (supports controlled activeTab from sidebar!)
-  const [internalActiveTab, setInternalActiveTab] = useState<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations'>('overview');
+  const [internalActiveTab, setInternalActiveTab] = useState<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'notifications' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations'>('overview');
 
-  const validTabs: Array<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'barcode' | 'registrations'> = [
+  const validTabs: Array<'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'notifications' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'barcode' | 'registrations'> = [
     'overview',
     'profiles',
     'coach-assignment',
     'attendance',
+    'notifications',
     'payments',
     'pricing',
     'users',
@@ -239,13 +249,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     internalActiveTab === 'cards' ||
     (internalActiveTab as string) === 'barcode';
 
-  const activeTab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations' = isCardsActive
+  const activeTab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'notifications' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations' = isCardsActive
     ? 'cards'
     : controlledActiveTab && validTabs.includes(controlledActiveTab as any)
     ? (controlledActiveTab as any)
     : internalActiveTab;
 
-  const setActiveTab = (tab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations') => {
+  const setActiveTab = (tab: 'overview' | 'profiles' | 'coach-assignment' | 'attendance' | 'notifications' | 'payments' | 'pricing' | 'users' | 'admin-profile' | 'settings' | 'cards' | 'registrations') => {
     setInternalActiveTab(tab);
     if (onTabChange) {
       onTabChange(tab);
@@ -1486,6 +1496,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <CalendarCheck className="w-4 h-4" />
           <span>Absen & Total Absen ({totalAttendances})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('notifications')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'notifications'
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>Kirim Notif Absen Selesai ({notifications.length})</span>
         </button>
 
         <button
@@ -3472,14 +3494,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowAddPaymentModal(true)}
-                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/30 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Catat Pembayaran Perpanjangan</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('notifications')}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span>Kirim Notif Selesai &amp; Tgl Absen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPaymentModal(true)}
+                    className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/30 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Catat Pembayaran Perpanjangan</span>
+                  </button>
+                </div>
               </div>
             );
           })()}
@@ -3842,6 +3874,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB: KIRIM PEMBERITAHUAN ABSEN SELESAI & TAGIHAN         */}
+      {/* ======================================================== */}
+      {activeTab === 'notifications' && (
+        <SessionNotificationManager
+          students={students}
+          attendances={attendances}
+          pricingPackages={pricingPackages}
+          notifications={notifications}
+          bankAccounts={bankAccounts}
+          academyProfile={academyProfile}
+          senderName={currentUser?.name || 'Admin Akademi'}
+          senderRole="admin"
+          onSendNotification={onSendNotification}
+          onDeleteNotification={onDeleteNotification}
+        />
       )}
 
       {/* ======================================================== */}
