@@ -361,6 +361,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const unreadStudentNotifications = studentNotifications.filter((n) => n.status === 'unread');
   const latestUnreadNotification = unreadStudentNotifications[0];
 
+  const handleDismissAllUnread = () => {
+    if (!onMarkNotificationRead) return;
+    unreadStudentNotifications.forEach((n) => onMarkNotificationRead(n.id));
+  };
+
   const handlePayFromNotification = (notif: SessionCompletionNotification) => {
     const matchedPkg =
       effectivePackages.find(
@@ -622,7 +627,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               {onMarkNotificationRead && (
                 <button
                   type="button"
-                  onClick={() => onMarkNotificationRead(latestUnreadNotification.id)}
+                  onClick={handleDismissAllUnread}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
                 >
                   Tandai Dibaca
@@ -633,7 +638,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 onClick={() => onTabChange('notifications')}
                 className="px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all cursor-pointer"
               >
-                Detail ({studentNotifications.length})
+                Detail ({unreadStudentNotifications.length})
               </button>
               <button
                 type="button"
@@ -1664,27 +1669,39 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 text-xs font-bold">
-                  {studentNotifications.length} Pemberitahuan
-                </span>
-                {unreadStudentNotifications.length > 0 && (
-                  <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold">
-                    {unreadStudentNotifications.length} Belum Dibaca
+                {unreadStudentNotifications.length > 0 ? (
+                  <>
+                    <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                      {unreadStudentNotifications.length} Pemberitahuan Baru
+                    </span>
+                    {onMarkNotificationRead && unreadStudentNotifications.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={handleDismissAllUnread}
+                        className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Tandai Semua Dibaca
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                    Semua Sudah Dibaca
                   </span>
                 )}
               </div>
             </div>
 
-            {studentNotifications.length === 0 ? (
+            {unreadStudentNotifications.length === 0 ? (
               <div className="text-center py-12 space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
                   <Bell className="w-7 h-7" />
                 </div>
                 <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
-                  Belum Ada Pemberitahuan Absen Selesai
+                  Tidak Ada Pemberitahuan Baru
                 </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  Saat kuota pertemuan Anda telah selesai atau mendekati habis, Admin atau Pelatih akan mengirimkan pemberitahuan beserta daftar tanggal absensi dan jadwal pembayaran paket berikutnya ke halaman ini.
+                  Pemberitahuan yang sudah Anda tandai dibaca tidak ditampilkan kembali. Pemberitahuan baru akan muncul di sini saat Admin atau Pelatih mengirimkannya.
                 </p>
                 <div className="pt-2 flex flex-wrap justify-center gap-2">
                   <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -1702,7 +1719,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
             ) : (
               <div className="space-y-5">
-                {studentNotifications.map((notif) => {
+                {unreadStudentNotifications.map((notif) => {
                   const isUnread = notif.status === 'unread';
                   const isPaid = notif.status === 'paid';
                   const sentDateDisplay = notif.sentAt

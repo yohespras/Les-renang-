@@ -1155,24 +1155,25 @@ export default function App() {
   };
 
   const handleMarkNotificationRead = (notifId: string) => {
-    let targetUpdated: SessionCompletionNotification | null = null;
+    const readAt = new Date().toISOString();
+    const target = sessionNotifications.find((n) => n.id === notifId);
+    const updatedTarget: SessionCompletionNotification | null =
+      target && target.status === 'unread'
+        ? { ...target, status: 'read', readAt }
+        : null;
+
     setSessionNotifications((prev) => {
-      const updated = prev.map((n) => {
-        if (n.id === notifId && n.status === 'unread') {
-          targetUpdated = {
-            ...n,
-            status: 'read',
-            readAt: new Date().toISOString(),
-          };
-          return targetUpdated;
-        }
-        return n;
-      });
+      const updated = prev.map((n) =>
+        n.id === notifId && n.status === 'unread'
+          ? { ...n, status: 'read' as const, readAt }
+          : n
+      );
       localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(updated));
       return updated;
     });
-    if (targetUpdated) {
-      syncSaveSessionNotification(targetUpdated);
+
+    if (updatedTarget) {
+      syncSaveSessionNotification(updatedTarget);
     }
   };
 
@@ -1193,20 +1194,22 @@ export default function App() {
     syncSavePayment(newPayment);
 
     if (newPayment.status === 'lunas') {
-      const changedNotifs: SessionCompletionNotification[] = [];
-      setSessionNotifications((prev) => {
-        const next = prev.map((n) => {
-          if (n.studentId === newPayment.studentId && n.status !== 'paid') {
-            const updatedN: SessionCompletionNotification = { ...n, status: 'paid' };
-            changedNotifs.push(updatedN);
-            return updatedN;
-          }
-          return n;
+      const changedNotifs: SessionCompletionNotification[] = sessionNotifications
+        .filter((n) => n.studentId === newPayment.studentId && n.status !== 'paid')
+        .map((n) => ({ ...n, status: 'paid' as const }));
+
+      if (changedNotifs.length > 0) {
+        setSessionNotifications((prev) => {
+          const next = prev.map((n) =>
+            n.studentId === newPayment.studentId && n.status !== 'paid'
+              ? { ...n, status: 'paid' as const }
+              : n
+          );
+          localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
+          return next;
         });
-        localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
-        return next;
-      });
-      changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+        changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+      }
     }
   };
 
@@ -1215,8 +1218,27 @@ export default function App() {
     const updated = payments.map((p) => (p.id === paymentId ? { ...p, status: newStatus } : p));
     setPayments(updated);
     localStorage.setItem('AQUA_PAYMENTS', JSON.stringify(updated));
-    const pUpdated = updated.find(p => p.id === paymentId);
-    if (pUpdated) syncSavePayment(pUpdated);
+    const pUpdated = updated.find((p) => p.id === paymentId);
+    if (pUpdated) {
+      syncSavePayment(pUpdated);
+      if (newStatus === 'lunas') {
+        const changedNotifs: SessionCompletionNotification[] = sessionNotifications
+          .filter((n) => n.studentId === pUpdated.studentId && n.status !== 'paid')
+          .map((n) => ({ ...n, status: 'paid' as const }));
+        if (changedNotifs.length > 0) {
+          setSessionNotifications((prev) => {
+            const next = prev.map((n) =>
+              n.studentId === pUpdated.studentId && n.status !== 'paid'
+                ? { ...n, status: 'paid' as const }
+                : n
+            );
+            localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
+            return next;
+          });
+          changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+        }
+      }
+    }
   };
 
   // Verify uploaded transfer proof and recharge student sessions
@@ -1256,20 +1278,22 @@ export default function App() {
     const sVer = updatedStudents.find(s => s.id === payment.studentId);
     if (sVer) syncSaveStudent(sVer);
 
-    const changedNotifs: SessionCompletionNotification[] = [];
-    setSessionNotifications((prev) => {
-      const next = prev.map((n) => {
-        if (n.studentId === payment.studentId && n.status !== 'paid') {
-          const updatedN: SessionCompletionNotification = { ...n, status: 'paid' };
-          changedNotifs.push(updatedN);
-          return updatedN;
-        }
-        return n;
+    const changedNotifs: SessionCompletionNotification[] = sessionNotifications
+      .filter((n) => n.studentId === payment.studentId && n.status !== 'paid')
+      .map((n) => ({ ...n, status: 'paid' as const }));
+
+    if (changedNotifs.length > 0) {
+      setSessionNotifications((prev) => {
+        const next = prev.map((n) =>
+          n.studentId === payment.studentId && n.status !== 'paid'
+            ? { ...n, status: 'paid' as const }
+            : n
+        );
+        localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
+        return next;
       });
-      localStorage.setItem('AQUA_SESSION_NOTIFICATIONS', JSON.stringify(next));
-      return next;
-    });
-    changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+      changedNotifs.forEach((n) => syncSaveSessionNotification(n));
+    }
   };
 
   // Update payment details
