@@ -177,6 +177,9 @@ export interface AcademyProfile {
   isRegistrationOpen: boolean;
   facilities: string[];
   footerName: string;
+  notificationTitle?: string;
+  notificationTemplate?: string;
+  notificationDueDays?: number;
 }
 
 export interface GalleryItem {
@@ -244,6 +247,7 @@ export interface SessionCompletionNotification {
   nextSessionsCount: number;
   amountDue: number;
   dueDate: string; // YYYY-MM-DD (Waktunya membayar kembali untuk pertemuan berikutnya)
+  title?: string;
   message: string;
   senderName: string;
   senderRole: 'admin' | 'pelatih';

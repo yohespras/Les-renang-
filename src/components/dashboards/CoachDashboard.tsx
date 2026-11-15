@@ -75,6 +75,7 @@ interface CoachDashboardProps {
   onDeleteNotification?: (id: string) => void;
   bankAccounts?: BankAccountInfo[];
   academyProfile?: AcademyProfile;
+  onUpdateAcademyProfile?: (profile: AcademyProfile) => void;
 }
 
 export const CoachDashboard: React.FC<CoachDashboardProps> = ({
@@ -102,6 +103,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
   onDeleteNotification,
   bankAccounts = [],
   academyProfile,
+  onUpdateAcademyProfile,
 }) => {
   const currentCoach = coaches.find((c) => c.id === activeCoachId) || coaches[0];
   const [internalTab, setInternalTab] = useState<'overview' | 'attendance' | 'notifications' | 'profile' | 'schedules' | 'evaluation'>('overview');
@@ -689,6 +691,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
           notifications={notifications}
           bankAccounts={bankAccounts}
           academyProfile={academyProfile}
+          onUpdateAcademyProfile={onUpdateAcademyProfile}
           senderName={currentCoach.name}
           senderRole="pelatih"
           onSendNotification={(notif) => onSendNotification?.(notif)}

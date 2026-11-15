@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Student,
   AttendanceRecord,
@@ -12,6 +12,8 @@ import {
   ROLE_LABELS,
   INITIAL_PRICING_PACKAGES,
   OFFICIAL_BANK_ACCOUNTS,
+  DEFAULT_NOTIFICATION_TITLE,
+  DEFAULT_NOTIFICATION_TEMPLATE,
   getEffectiveStudentQuota,
   getLiveAcademyProfile,
 } from '../data/mockData';
@@ -36,6 +38,10 @@ import {
   MessageSquare,
   Building2,
   Filter,
+  Settings,
+  RotateCcw,
+  Save,
+  Eye,
 } from 'lucide-react';
 
 interface SessionNotificationManagerProps {
@@ -45,6 +51,7 @@ interface SessionNotificationManagerProps {
   notifications: SessionCompletionNotification[];
   bankAccounts?: BankAccountInfo[];
   academyProfile?: AcademyProfile;
+  onUpdateAcademyProfile?: (profile: AcademyProfile) => void;
   senderName: string;
   senderRole: 'admin' | 'pelatih';
   onSendNotification: (notif: SessionCompletionNotification) => void;
@@ -52,6 +59,22 @@ interface SessionNotificationManagerProps {
   preselectedStudentId?: string | null;
   onClearPreselected?: () => void;
 }
+
+const TEMPLATE_VARIABLES: Array<{ key: string; label: string; desc: string }> = [
+  { key: '{nama_wali}', label: 'Nama Wali', desc: 'Nama Orang Tua / Wali siswa' },
+  { key: '{nama_siswa}', label: 'Nama Siswa', desc: 'Nama lengkap peserta' },
+  { key: '{barcode}', label: 'NIS / Barcode', desc: 'Kode barcode kartu siswa' },
+  { key: '{kelas}', label: 'Kelas', desc: 'Nama kelas renang peserta' },
+  { key: '{nama_akademi}', label: 'Nama Akademi', desc: 'Nama akademi aktif' },
+  { key: '{terlaksana}', label: 'Sesi Hadir', desc: 'Jumlah pertemuan selesai' },
+  { key: '{total_kuota}', label: 'Total Kuota', desc: 'Total kuota paket' },
+  { key: '{daftar_tanggal}', label: 'Tanggal Absen', desc: 'Daftar tanggal & jam hadir' },
+  { key: '{paket_berikutnya}', label: 'Paket Lanjut', desc: 'Nama paket tagihan berikutnya' },
+  { key: '{jumlah_sesi}', label: 'Jml Sesi Baru', desc: 'Jumlah sesi paket baru' },
+  { key: '{nominal}', label: 'Nominal Rp', desc: 'Nominal tagihan terformat' },
+  { key: '{jatuh_tempo}', label: 'Tgl Jatuh Tempo', desc: 'Jadwal waktunya bayar kembali' },
+  { key: '{daftar_rekening}', label: 'Rekening Resmi', desc: 'Daftar rekening aktif akademi' },
+];
 
 const formatIndoDate = (dateStr: string): string => {
   if (!dateStr) return '-';
@@ -85,6 +108,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
   notifications = [],
   bankAccounts = [],
   academyProfile,
+  onUpdateAcademyProfile,
   senderName,
   senderRole,
   onSendNotification,
@@ -100,12 +124,43 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
       : OFFICIAL_BANK_ACCOUNTS.filter((b) => b.isActive !== false);
   const liveProfile = getLiveAcademyProfile(academyProfile);
 
-  const [subTab, setSubTab] = useState<'students' | 'history'>('students');
+  const activeTemplateTitle =
+    (liveProfile.notificationTitle || '').trim() || DEFAULT_NOTIFICATION_TITLE;
+  const activeTemplateBody =
+    (liveProfile.notificationTemplate || '').trim() || DEFAULT_NOTIFICATION_TEMPLATE;
+  const activeDefaultDueDays =
+    typeof liveProfile.notificationDueDays === 'number' && liveProfile.notificationDueDays >= 0
+      ? liveProfile.notificationDueDays
+      : 3;
+
+  const getDefaultDueDateStr = (daysOffset = activeDefaultDueDays) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysOffset);
+    return d.toISOString().split('T')[0];
+  };
+
+  const [subTab, setSubTab] = useState<'students' | 'history' | 'settings'>('students');
   const [statusFilter, setStatusFilter] = useState<'finished' | 'almost' | 'all'>('finished');
   const [classFilter, setClassFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Template Settings Editor State
+  const templateTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [templateTitleInput, setTemplateTitleInput] = useState<string>(activeTemplateTitle);
+  const [templateBodyInput, setTemplateBodyInput] = useState<string>(activeTemplateBody);
+  const [dueDaysInput, setDueDaysInput] = useState<number>(activeDefaultDueDays);
+
+  useEffect(() => {
+    setTemplateTitleInput((liveProfile.notificationTitle || '').trim() || DEFAULT_NOTIFICATION_TITLE);
+    setTemplateBodyInput((liveProfile.notificationTemplate || '').trim() || DEFAULT_NOTIFICATION_TEMPLATE);
+    setDueDaysInput(
+      typeof liveProfile.notificationDueDays === 'number' && liveProfile.notificationDueDays >= 0
+        ? liveProfile.notificationDueDays
+        : 3
+    );
+  }, [liveProfile.notificationTitle, liveProfile.notificationTemplate, liveProfile.notificationDueDays]);
 
   // Compose Notification Modal State
   const [composeStudent, setComposeStudent] = useState<Student | null>(null);
@@ -113,11 +168,8 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
   const [nextPackageName, setNextPackageName] = useState<string>('');
   const [nextSessionsCount, setNextSessionsCount] = useState<number>(8);
   const [amountDue, setAmountDue] = useState<number>(0);
-  const [dueDate, setDueDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 3);
-    return d.toISOString().split('T')[0];
-  });
+  const [dueDate, setDueDate] = useState<string>(() => getDefaultDueDateStr(3));
+  const [customTitle, setCustomTitle] = useState<string>(activeTemplateTitle);
   const [customMessage, setCustomMessage] = useState<string>('');
 
   const showFeedback = (msg: string) => {
@@ -175,7 +227,8 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
     price: number,
     payDueDate: string,
     executedCount: number,
-    totalCount: number
+    totalCount: number,
+    templateOverride?: string
   ) => {
     const datesText =
       dates.length > 0
@@ -194,26 +247,39 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
             .join('\n')
         : '- Hubungi admin untuk nomor rekening resmi';
 
-    return (
-      `Halo Bapak/Ibu ${st.parentName || st.name},\n\n` +
-      `Pemberitahuan dari ${liveProfile.effectiveName}: Sesi pertemuan renang ananda *${st.name}* (${st.barcode}) telah selesai (${executedCount}/${totalCount} pertemuan).\n\n` +
-      `Daftar Tanggal Kehadiran (Absen):\n${datesText}\n\n` +
-      `Waktunya Melakukan Pembayaran Kembali untuk Pertemuan Berikutnya:\n` +
-      `- Paket Berikutnya: ${pkgName} (${sessionsCount} Sesi)\n` +
-      `- Nominal Tagihan: Rp ${price.toLocaleString('id-ID')}\n` +
-      `- Batas / Jadwal Bayar: ${formatIndoDate(payDueDate)}\n\n` +
-      `Transfer Pembayaran ke Rekening Resmi:\n${bankText}\n\n` +
-      `Setelah transfer, mohon unggah bukti transfer melalui menu Riwayat Bayar di akun peserta. Terima kasih.`
-    );
+    const classLabel = ROLE_LABELS[st.roleClass]?.title || st.roleClass;
+    const rawTemplate =
+      (templateOverride !== undefined ? templateOverride : activeTemplateBody) ||
+      DEFAULT_NOTIFICATION_TEMPLATE;
+
+    const replacements: Record<string, string> = {
+      '{nama_wali}': st.parentName || st.name,
+      '{nama_siswa}': st.name,
+      '{barcode}': st.barcode || st.id,
+      '{kelas}': classLabel,
+      '{nama_akademi}': liveProfile.effectiveName,
+      '{terlaksana}': String(executedCount),
+      '{total_kuota}': String(totalCount),
+      '{daftar_tanggal}': datesText,
+      '{paket_berikutnya}': pkgName,
+      '{jumlah_sesi}': String(sessionsCount),
+      '{nominal}': `Rp ${price.toLocaleString('id-ID')}`,
+      '{jatuh_tempo}': formatIndoDate(payDueDate),
+      '{daftar_rekening}': bankText,
+    };
+
+    let result = rawTemplate;
+    Object.entries(replacements).forEach(([token, val]) => {
+      result = result.split(token).join(val);
+    });
+    return result;
   };
 
   const openComposeModal = (st: Student) => {
     const stats = getStudentQuotaStats(st);
     const defaultPkg =
       effectivePackages.find((p) => p.roleClass === st.roleClass) || effectivePackages[0];
-    const defaultDue = new Date();
-    defaultDue.setDate(defaultDue.getDate() + 3);
-    const defaultDueStr = defaultDue.toISOString().split('T')[0];
+    const defaultDueStr = getDefaultDueDateStr(activeDefaultDueDays);
 
     const pkgId = defaultPkg?.id || '';
     const pkgName = defaultPkg?.packageName || `Paket ${ROLE_LABELS[st.roleClass]?.title || st.roleClass}`;
@@ -226,6 +292,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
     setNextSessionsCount(pkgSessions);
     setAmountDue(pkgPrice);
     setDueDate(defaultDueStr);
+    setCustomTitle(activeTemplateTitle);
     setCustomMessage(
       buildDefaultMessage(
         st,
@@ -316,6 +383,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
       nextSessionsCount: Math.max(1, Number(nextSessionsCount) || 8),
       amountDue: Math.max(0, Number(amountDue) || 0),
       dueDate,
+      title: customTitle.trim() || activeTemplateTitle,
       message: customMessage.trim(),
       senderName,
       senderRole,
@@ -328,6 +396,69 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
     showFeedback(
       `Pemberitahuan selesai absen & tagihan pertemuan berikutnya untuk "${composeStudent.name}" berhasil dikirim!`
     );
+  };
+
+  const handleInsertVariable = (token: string) => {
+    const textarea = templateTextareaRef.current;
+    if (!textarea) {
+      setTemplateBodyInput((prev) => `${prev}${prev.endsWith('\n') || !prev ? '' : ' '}${token}`);
+      return;
+    }
+    const start = textarea.selectionStart ?? templateBodyInput.length;
+    const end = textarea.selectionEnd ?? templateBodyInput.length;
+    const nextVal =
+      templateBodyInput.slice(0, start) + token + templateBodyInput.slice(end);
+    setTemplateBodyInput(nextVal);
+    setTimeout(() => {
+      textarea.focus();
+      const cursor = start + token.length;
+      textarea.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+
+  const handleSaveTemplateSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanedTitle = templateTitleInput.trim() || DEFAULT_NOTIFICATION_TITLE;
+    const cleanedBody = templateBodyInput.trim() || DEFAULT_NOTIFICATION_TEMPLATE;
+    const cleanedDueDays = Math.max(0, Math.min(60, Number(dueDaysInput) || 0));
+
+    if (onUpdateAcademyProfile) {
+      onUpdateAcademyProfile({
+        ...liveProfile,
+        notificationTitle: cleanedTitle,
+        notificationTemplate: cleanedBody,
+        notificationDueDays: cleanedDueDays,
+      });
+      showFeedback(
+        'Pengaturan template pemberitahuan berhasil disimpan & disinkronkan ke semua perangkat!'
+      );
+    } else {
+      try {
+        const nextProfile = {
+          ...liveProfile,
+          notificationTitle: cleanedTitle,
+          notificationTemplate: cleanedBody,
+          notificationDueDays: cleanedDueDays,
+        };
+        localStorage.setItem('AQUA_ACADEMY_PROFILE', JSON.stringify(nextProfile));
+        showFeedback('Pengaturan template pemberitahuan tersimpan secara lokal.');
+      } catch (err) {}
+    }
+  };
+
+  const handleResetTemplateSettings = () => {
+    setTemplateTitleInput(DEFAULT_NOTIFICATION_TITLE);
+    setTemplateBodyInput(DEFAULT_NOTIFICATION_TEMPLATE);
+    setDueDaysInput(3);
+    if (onUpdateAcademyProfile) {
+      onUpdateAcademyProfile({
+        ...liveProfile,
+        notificationTitle: DEFAULT_NOTIFICATION_TITLE,
+        notificationTemplate: DEFAULT_NOTIFICATION_TEMPLATE,
+        notificationDueDays: 3,
+      });
+    }
+    showFeedback('Template pemberitahuan dikembalikan ke pengaturan standar.');
   };
 
   const finishedStudents = useMemo(
@@ -350,9 +481,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
       return;
     }
 
-    const defaultDue = new Date();
-    defaultDue.setDate(defaultDue.getDate() + 3);
-    const dueStr = defaultDue.toISOString().split('T')[0];
+    const dueStr = getDefaultDueDateStr(activeDefaultDueDays);
 
     let sentCount = 0;
     finishedStudents.forEach((st, idx) => {
@@ -379,6 +508,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
         nextSessionsCount: pkgSessions,
         amountDue: pkgPrice,
         dueDate: dueStr,
+        title: activeTemplateTitle,
         message: buildDefaultMessage(
           st,
           stats.dateItems,
@@ -454,6 +584,19 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
+            onClick={() => setSubTab('settings')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+              subTab === 'settings'
+                ? 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-600/20'
+                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Pengaturan Template</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleBulkSendFinished}
             disabled={finishedStudents.length === 0}
             className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-40 text-white text-xs font-extrabold shadow-lg shadow-rose-600/20 flex items-center gap-2 transition-all cursor-pointer"
@@ -483,7 +626,7 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
 
       {/* Sub-Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+        <div className="flex flex-wrap items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
           <button
             type="button"
             onClick={() => setSubTab('students')}
@@ -508,6 +651,19 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
           >
             <History className="w-4 h-4" />
             <span>Riwayat Terkirim ({notifications.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubTab('settings')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              subTab === 'settings'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/20'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Pengaturan Template</span>
           </button>
         </div>
 
@@ -889,6 +1045,195 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
         </div>
       )}
 
+      {/* VIEW 3: PENGATURAN TEMPLATE PEMBERITAHUAN */}
+      {subTab === 'settings' && (() => {
+        const sampleStudent: Student = students[0] || {
+          id: 'sample-1',
+          barcode: 'AQUA-DSR-101',
+          name: 'Budi Santoso',
+          gender: 'Laki-laki',
+          age: 9,
+          birthDate: '2017-04-12',
+          roleClass: 'dasar',
+          phone: '081234567890',
+          parentName: 'Ibu Sari',
+          emergencyContact: '081234567890',
+          joinedDate: '2026-09-01',
+          status: 'active',
+          remainingQuota: 0,
+          totalQuota: 8,
+          avatarUrl: '',
+        };
+        const sampleStats = students[0]
+          ? getStudentQuotaStats(students[0])
+          : {
+              dateItems: [
+                { dateStr: '2026-10-05', timeStr: '16:00', poolLane: 'Jalur 1' },
+                { dateStr: '2026-10-12', timeStr: '16:00', poolLane: 'Jalur 1' },
+              ],
+              totalQuota: 8,
+              executedSessions: 8,
+              remainingQuota: 0,
+            };
+        const samplePkg =
+          effectivePackages.find((p) => p.roleClass === sampleStudent.roleClass) || effectivePackages[0];
+        const previewDueDate = getDefaultDueDateStr(dueDaysInput);
+        const previewText = buildDefaultMessage(
+          sampleStudent,
+          sampleStats.dateItems,
+          samplePkg?.packageName || 'Paket Kelas Dasar',
+          samplePkg?.sessionsCount || 8,
+          samplePkg?.price || 350000,
+          previewDueDate,
+          sampleStats.executedSessions,
+          sampleStats.totalQuota,
+          templateBodyInput
+        );
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <form
+              onSubmit={handleSaveTemplateSettings}
+              className="lg:col-span-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-5 text-xs"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      Pengaturan Template Pemberitahuan
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Sesuaikan format pesan, judul, dan tenggat pembayaran otomatis saat mengirim notifikasi.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetTemplateSettings}
+                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Standar</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Judul Pemberitahuan Default (Tampil di Akun Peserta):
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={templateTitleInput}
+                    onChange={(e) => setTemplateTitleInput(e.target.value)}
+                    placeholder="Contoh: Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Tenggat Bayar Default (Hari):
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={60}
+                    required
+                    value={dueDaysInput}
+                    onChange={(e) => setDueDaysInput(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-extrabold text-cyan-600 dark:text-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Otomatis +{dueDaysInput} hari dari tanggal kirim
+                  </span>
+                </div>
+              </div>
+
+              {/* Clickable Placeholder Variables */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <span className="font-extrabold text-slate-700 dark:text-slate-200 block">
+                  Variabel Otomatis (Klik untuk menyisipkan ke template):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {TEMPLATE_VARIABLES.map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => handleInsertVariable(v.key)}
+                      title={v.desc}
+                      className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-cyan-500/30 hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span>+ {v.key}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Isi Template Pesan Pemberitahuan &amp; WhatsApp:
+                </label>
+                <textarea
+                  ref={templateTextareaRef}
+                  rows={12}
+                  required
+                  value={templateBodyInput}
+                  onChange={(e) => setTemplateBodyInput(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-[11px] text-slate-800 dark:text-slate-200 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold shadow-lg shadow-cyan-600/20 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Pengaturan Template</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Live Preview Card */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-emerald-500" />
+                    Pratinjau Hasil Pesan
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                    Live Preview
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-cyan-50/70 dark:bg-cyan-950/25 border border-cyan-500/30">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block">
+                    Judul Notif Peserta:
+                  </span>
+                  <p className="text-xs font-extrabold text-slate-900 dark:text-white mt-0.5">
+                    {templateTitleInput || DEFAULT_NOTIFICATION_TITLE}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 font-mono text-[11px] text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed max-h-[420px] overflow-y-auto">
+                  {previewText}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Pratinjau menggunakan data contoh peserta ({sampleStudent.name}). Saat dikirim satuan maupun massal, seluruh variabel akan terisi otomatis sesuai data masing-masing peserta.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* COMPOSE / SEND NOTIFICATION MODAL */}
       {composeStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
@@ -1054,18 +1399,29 @@ export const SessionNotificationManager: React.FC<SessionNotificationManagerProp
                     </span>
                   </div>
 
-                  {/* Editable Message */}
+                  {/* Editable Title & Message */}
                   <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Judul Pemberitahuan:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white mb-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+
                     <div className="flex items-center justify-between mb-1">
                       <label className="font-bold text-slate-700 dark:text-slate-300">
-                        Isi Pesan Pemberitahuan (Dapat Diedit):
+                        Isi Pesan Pemberitahuan (Mengikuti Template Tersimpan • Dapat Diedit):
                       </label>
                       <button
                         type="button"
                         onClick={() => handleRegenerateMessage()}
                         className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
                       >
-                        Reset Template Otomatis
+                        Terapkan Template Tersimpan
                       </button>
                     </div>
                     <textarea

@@ -410,7 +410,25 @@ export const DEFAULT_ACADEMY_PROFILE: AcademyProfile = {
     'Tribun Penonton & CCTV Keamanan 24 Jam',
   ],
   footerName: 'Yohes',
+  notificationTitle: 'Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali',
+  notificationDueDays: 3,
+  notificationTemplate:
+    'Halo Bapak/Ibu {nama_wali},\n\n' +
+    'Pemberitahuan dari {nama_akademi}: Sesi pertemuan renang ananda *{nama_siswa}* ({barcode}) telah selesai ({terlaksana}/{total_kuota} pertemuan).\n\n' +
+    'Daftar Tanggal Kehadiran (Absen):\n{daftar_tanggal}\n\n' +
+    'Waktunya Melakukan Pembayaran Kembali untuk Pertemuan Berikutnya:\n' +
+    '- Paket Berikutnya: {paket_berikutnya} ({jumlah_sesi} Sesi)\n' +
+    '- Nominal Tagihan: {nominal}\n' +
+    '- Batas / Jadwal Bayar: {jatuh_tempo}\n\n' +
+    'Transfer Pembayaran ke Rekening Resmi:\n{daftar_rekening}\n\n' +
+    'Setelah transfer, mohon unggah bukti transfer melalui menu Riwayat Bayar di akun peserta. Terima kasih.',
 };
+
+export const DEFAULT_NOTIFICATION_TITLE =
+  'Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali';
+
+export const DEFAULT_NOTIFICATION_TEMPLATE =
+  DEFAULT_ACADEMY_PROFILE.notificationTemplate || '';
 
 // ============================================================================
 // 7. GALERI DOKUMENTASI

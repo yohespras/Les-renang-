@@ -3887,6 +3887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           notifications={notifications}
           bankAccounts={bankAccounts}
           academyProfile={academyProfile}
+          onUpdateAcademyProfile={onUpdateAcademyProfile}
           senderName={currentUser?.name || 'Admin Akademi'}
           senderRole="admin"
           onSendNotification={onSendNotification}

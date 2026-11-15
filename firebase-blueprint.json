@@ -128,7 +128,10 @@
         "registrationFee": { "type": "number" },
         "isRegistrationOpen": { "type": "boolean" },
         "facilities": { "type": "array" },
-        "footerName": { "type": "string" }
+        "footerName": { "type": "string" },
+        "notificationTitle": { "type": "string" },
+        "notificationTemplate": { "type": "string" },
+        "notificationDueDays": { "type": "number" }
       },
       "required": ["name"]
     },
@@ -190,6 +193,7 @@
         "nextSessionsCount": { "type": "number" },
         "amountDue": { "type": "number" },
         "dueDate": { "type": "string" },
+        "title": { "type": "string" },
         "message": { "type": "string" },
         "senderName": { "type": "string" },
         "senderRole": { "type": "string" },

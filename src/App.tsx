@@ -1994,6 +1994,7 @@ export default function App() {
             onDeleteNotification={handleDeleteNotification}
             bankAccounts={bankAccounts}
             academyProfile={academyProfile}
+            onUpdateAcademyProfile={handleUpdateAcademyProfile}
           />
         );
 

@@ -615,7 +615,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </span>
                 </div>
                 <h3 className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
-                  Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali
+                  {latestUnreadNotification.title || 'Absen Pertemuan Telah Selesai • Waktunya Bayar Kembali'}
                 </h3>
                 <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-line leading-relaxed">
                   {latestUnreadNotification.message}
@@ -1768,7 +1768,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             </span>
                           </div>
                           <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-                            Pemberitahuan Penyelesaian {notif.executedSessions} / {notif.totalQuota} Pertemuan
+                            {notif.title || `Pemberitahuan Penyelesaian ${notif.executedSessions} / ${notif.totalQuota} Pertemuan`}
                           </h3>
                         </div>
 
